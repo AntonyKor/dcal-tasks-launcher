@@ -62,3 +62,71 @@ function dueLabel(due, allDay) {
     var day = allDay ? d.getUTCDate() : d.getDate()
     return MONTHS[month] + " " + day
 }
+
+function selectTasks(tasks, calendars, query, showCompleted) {
+    var open = []
+    var done = []
+    var needle = (query || "").toLowerCase()
+    var cals = calendars || {}
+    var list = Array.isArray(tasks) ? tasks : []
+
+    for (var i = 0; i < list.length; i++) {
+        var task = list[i]
+        if (!task || task.status === "cancelled")
+            continue
+
+        var cal = cals[task.calendarId]
+        var listName = cal ? cal.name : ""
+        var summary = task.summary || ""
+
+        if (needle.length > 0
+            && summary.toLowerCase().indexOf(needle) === -1
+            && listName.toLowerCase().indexOf(needle) === -1)
+            continue
+
+        var entry = {
+            task: task,
+            listName: listName,
+            due: dueLabel(task.due, task.allDay === true)
+        }
+
+        if (task.status === "completed") {
+            if (showCompleted)
+                done.push(entry)
+        } else {
+            open.push(entry)
+        }
+    }
+
+    open.sort(_byDueThenSummary)
+    done.sort(_byCompletedDesc)
+    return {open: open, done: done}
+}
+
+function _byDueThenSummary(a, b) {
+    var ta = _timeOf(a.task.due)
+    var tb = _timeOf(b.task.due)
+    if (ta !== tb)
+        return ta - tb
+
+    var sa = (a.task.summary || "").toLowerCase()
+    var sb = (b.task.summary || "").toLowerCase()
+    if (sa < sb)
+        return -1
+    return sa > sb ? 1 : 0
+}
+
+function _byCompletedDesc(a, b) {
+    return _timeOf(b.task.completed) - _timeOf(a.task.completed)
+}
+
+// Undated sorts last; Infinity keeps it there without a special case in the
+// comparators. Infinity - Infinity is NaN, so equal-undated pairs fall through
+// to the summary tiebreak only because _byDueThenSummary compares before
+// subtracting.
+function _timeOf(value) {
+    if (!value)
+        return Infinity
+    var t = new Date(value).getTime()
+    return isNaN(t) ? Infinity : t
+}

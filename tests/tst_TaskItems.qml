@@ -107,4 +107,130 @@ TestCase {
     function test_dueLabel_emptyWhenUnparseable() {
         compare(TaskItems.dueLabel("not-a-date", true), "")
     }
+
+    function makeTask(over) {
+        var base = {
+            id: "t1", summary: "Task", status: "needs_action",
+            calendarId: "cal-chores", allDay: false
+        }
+        for (var k in over)
+            base[k] = over[k]
+        return base
+    }
+
+    readonly property var cals: ({
+        "cal-chores": {id: "cal-chores", name: "Chores", accountName: "Radicale",
+                       holdsTasks: true, readOnly: false},
+        "cal-fitness": {id: "cal-fitness", name: "Fitness", accountName: "Radicale",
+                        holdsTasks: true, readOnly: false}
+    })
+
+    function test_selectTasks_splitsOpenFromCompleted() {
+        var tasks = [
+            makeTask({id: "a", summary: "Alpha"}),
+            makeTask({id: "b", summary: "Bravo", status: "completed",
+                      completed: "2026-08-21T10:00:00Z"})
+        ]
+        var r = TaskItems.selectTasks(tasks, cals, "", true)
+        compare(r.open.length, 1)
+        compare(r.open[0].task.id, "a")
+        compare(r.done.length, 1)
+        compare(r.done[0].task.id, "b")
+    }
+
+    function test_selectTasks_hidesCompletedWhenToggleOff() {
+        var tasks = [
+            makeTask({id: "a", summary: "Alpha"}),
+            makeTask({id: "b", summary: "Bravo", status: "completed",
+                      completed: "2026-08-21T10:00:00Z"})
+        ]
+        var r = TaskItems.selectTasks(tasks, cals, "", false)
+        compare(r.open.length, 1)
+        compare(r.done.length, 0)
+    }
+
+    function test_selectTasks_dropsCancelled() {
+        var tasks = [
+            makeTask({id: "a", summary: "Alpha"}),
+            makeTask({id: "x", summary: "Scrapped", status: "cancelled"})
+        ]
+        var r = TaskItems.selectTasks(tasks, cals, "", true)
+        compare(r.open.length, 1)
+        compare(r.open[0].task.id, "a")
+        compare(r.done.length, 0)
+    }
+
+    function test_selectTasks_ordersByDueThenUndatedLast() {
+        var tasks = [
+            makeTask({id: "none", summary: "No due date"}),
+            makeTask({id: "late", summary: "Later", allDay: true,
+                      due: "2026-03-01T00:00:00Z"}),
+            makeTask({id: "soon", summary: "Sooner", allDay: true,
+                      due: "2026-02-21T00:00:00Z"})
+        ]
+        var r = TaskItems.selectTasks(tasks, cals, "", false)
+        compare(r.open.length, 3)
+        compare(r.open[0].task.id, "soon")
+        compare(r.open[1].task.id, "late")
+        compare(r.open[2].task.id, "none")
+    }
+
+    function test_selectTasks_undatedTiesBreakBySummary() {
+        var tasks = [
+            makeTask({id: "z", summary: "zebra"}),
+            makeTask({id: "a", summary: "Apple"}),
+            makeTask({id: "m", summary: "mango"})
+        ]
+        var r = TaskItems.selectTasks(tasks, cals, "", false)
+        compare(r.open[0].task.id, "a")
+        compare(r.open[1].task.id, "m")
+        compare(r.open[2].task.id, "z")
+    }
+
+    function test_selectTasks_completedNewestFirst() {
+        var tasks = [
+            makeTask({id: "old", summary: "Old", status: "completed",
+                      completed: "2026-08-01T10:00:00Z"}),
+            makeTask({id: "new", summary: "New", status: "completed",
+                      completed: "2026-08-21T10:00:00Z"})
+        ]
+        var r = TaskItems.selectTasks(tasks, cals, "", true)
+        compare(r.done[0].task.id, "new")
+        compare(r.done[1].task.id, "old")
+    }
+
+    function test_selectTasks_searchIsCaseInsensitiveOnSummary() {
+        var tasks = [
+            makeTask({id: "a", summary: "Find therapist"}),
+            makeTask({id: "b", summary: "Buy milk"})
+        ]
+        var r = TaskItems.selectTasks(tasks, cals, "THERAPIST", false)
+        compare(r.open.length, 1)
+        compare(r.open[0].task.id, "a")
+    }
+
+    function test_selectTasks_searchMatchesListName() {
+        var tasks = [
+            makeTask({id: "a", summary: "Alpha", calendarId: "cal-chores"}),
+            makeTask({id: "b", summary: "Bravo", calendarId: "cal-fitness"})
+        ]
+        var r = TaskItems.selectTasks(tasks, cals, "fitn", false)
+        compare(r.open.length, 1)
+        compare(r.open[0].task.id, "b")
+    }
+
+    function test_selectTasks_annotatesListNameAndDue() {
+        var tasks = [makeTask({id: "a", summary: "Alpha", allDay: true,
+                               due: "2026-02-21T00:00:00Z"})]
+        var r = TaskItems.selectTasks(tasks, cals, "", false)
+        compare(r.open[0].listName, "Chores")
+        compare(r.open[0].due, "Feb 21")
+    }
+
+    function test_selectTasks_unknownCalendarGivesEmptyListName() {
+        var tasks = [makeTask({id: "a", summary: "Alpha", calendarId: "gone"})]
+        var r = TaskItems.selectTasks(tasks, {}, "", false)
+        compare(r.open.length, 1)
+        compare(r.open[0].listName, "")
+    }
 }
