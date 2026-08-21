@@ -273,4 +273,55 @@ TestCase {
         var due = DateParser.parseTrailingDate("gym aug 30 at 6pm", friMorning).due
         verify(/^2026-08-30T18:00:00[-+]\d{2}:\d{2}$/.test(due), "unexpected due: " + due)
     }
+
+    // A bare hour is read as a 24-hour clock: 5 is 05:00, 17 is 17:00.
+    function test_bareHourIsTwentyFourHour() {
+        var r = DateParser.parseTrailingDate("test input tomorrow at 5", friMorning)
+        compare(r.summary, "test input")
+        verifyTimed(r, 2026, 7, 22, 5, 0)
+    }
+
+    function test_bareAfternoonHour() {
+        verifyTimed(DateParser.parseTrailingDate("test input tomorrow at 17", friMorning),
+                    2026, 7, 22, 17, 0)
+    }
+
+    function test_bareHourZeroIsMidnight() {
+        verifyTimed(DateParser.parseTrailingDate("backup tomorrow at 0", friMorning),
+                    2026, 7, 22, 0, 0)
+    }
+
+    function test_bareHourWithoutADateFollowsTheTodayOrTomorrowRule() {
+        // 17:00 is still ahead of 10:00, so it is today.
+        verifyTimed(DateParser.parseTrailingDate("standup at 17", friMorning),
+                    2026, 7, 21, 17, 0)
+        // 05:00 has gone, so it is tomorrow.
+        verifyTimed(DateParser.parseTrailingDate("standup at 5", friMorning),
+                    2026, 7, 22, 5, 0)
+    }
+
+    function test_bareHourAlongsideAWeekday() {
+        verifyTimed(DateParser.parseTrailingDate("gym friday at 5", friMorning),
+                    2026, 7, 21, 5, 0)
+    }
+
+    // "at" is required. Without it a trailing number is part of the title, or
+    // every "buy 5" would sprout a due date.
+    function test_trailingNumberWithoutAtIsNotATime() {
+        compare(DateParser.parseTrailingDate("buy 5", friMorning), null)
+        compare(DateParser.parseTrailingDate("order pizza 12", friMorning), null)
+    }
+
+    function test_bareHourOutOfRangeIsNotATime() {
+        compare(DateParser.parseTrailingDate("wait at 24", friMorning), null)
+        compare(DateParser.parseTrailingDate("wait at 99", friMorning), null)
+    }
+
+    // The am/pm and HH:MM forms still win over the bare-hour reading.
+    function test_meridiemAndColonFormsAreUnaffected() {
+        verifyTimed(DateParser.parseTrailingDate("standup tomorrow at 5pm", friMorning),
+                    2026, 7, 22, 17, 0)
+        verifyTimed(DateParser.parseTrailingDate("standup tomorrow at 5:45", friMorning),
+                    2026, 7, 22, 5, 45)
+    }
 }

@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell.Io
+import qs.Common
 import qs.Services
 import "TaskItems.js" as TaskItems
 
@@ -62,6 +63,13 @@ Item {
         defaultView = pluginService.loadPluginData(pluginName, "defaultView", "all")
     }
 
+    // Due times render the way the rest of the shell renders a clock, rather
+    // than by a rule of this plugin's own: DMS resolves "auto" against the
+    // locale and lets Settings → Time & Weather override it. Guarded the same
+    // way DMS guards its own reads of this (see DndPill.qml).
+    readonly property bool use24Hour: typeof SettingsData !== "undefined"
+                                      ? SettingsData.use24HourClock : true
+
     // The DMS launcher calls this synchronously on every keystroke, so it must
     // never block. Return whatever is cached and let the refresh land later.
     function getItems(query) {
@@ -76,6 +84,7 @@ Item {
             defaultCalendarId: root.defaultCalendarId,
             showCompleted: root.showCompleted,
             defaultView: root.defaultView,
+            use24Hour: root.use24Hour,
             nowMs: Date.now()
         }, query || "")
     }

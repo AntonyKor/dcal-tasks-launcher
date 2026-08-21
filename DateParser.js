@@ -57,6 +57,18 @@ var _TIME_RULES = [
                 return null
             return {hour: hour, minute: minute}
         }
+    },
+    // "at 17", "at 5" — a 24-hour clock, so 5 is 05:00 and not the evening.
+    // Tried last so the am/pm and HH:MM forms above keep their reading, and
+    // "at" is mandatory: without it every "buy 5" would sprout a due date.
+    {
+        re: /(?:^|\s)at\s+(\d{1,2})$/i,
+        read: function (m) {
+            var hour = parseInt(m[1], 10)
+            if (hour > 23)
+                return null
+            return {hour: hour, minute: 0}
+        }
     }
 ]
 

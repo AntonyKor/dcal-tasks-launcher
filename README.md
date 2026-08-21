@@ -90,7 +90,12 @@ saturday and gets no due date.
 | `2026-08-30` | that date |
 | `30/8`, `30/8/26`, `30.8.2026` | that date, **day first** |
 | any of the above + `at 6PM` / `6:30pm` / `at 18:00` | that date, at that time |
-| `at 6PM` on its own | today if 6PM is still ahead, otherwise tomorrow |
+| any of the above + `at 17` / `at 5` | that date, on a **24-hour** clock |
+| a time on its own (`at 18:00`) | today if it is still ahead, otherwise tomorrow |
+
+A bare hour is a 24-hour clock: `at 5` is 05:00 and `at 17` is 17:00. Type
+`at 5pm` for the evening. The `at` is required — without it a trailing number
+stays part of the title, or every `; buy 5` would sprout a due date.
 
 A date with no year means the next one to come: `jan 5` typed in August is
 next January, not four months ago. A date that does not exist (`feb 30`,
@@ -118,7 +123,22 @@ that is *only* a date (`; tomorrow`) has no title left over, so it offers the
 literal row alone.
 
 Due dates are shown on task rows too: `due Aug 30` for an all-day task and
-`due Aug 22, 6:00 PM` for one with a time.
+`due Aug 22, 18:00` for one with a time.
+
+### Clock format
+
+Times are rendered the way the rest of the shell renders a clock, from DMS's
+own **Settings → Time & Weather → Clock format**. There is no plugin setting
+for it:
+
+| DMS `clockFormat` | A 6pm due reads |
+|---|---|
+| `24h` | `due Aug 22, 18:00` |
+| `12h` | `due Aug 22, 6:00 PM` |
+| `auto` (default) | whichever your locale uses — `LC_TIME=en_US` gives 12-hour, `en_GB` and `de_DE` give 24-hour |
+
+Input is unaffected: `at 18:00`, `at 17` and `at 5pm` are all understood
+whatever the clock format is set to.
 
 ## Settings
 
@@ -128,6 +148,9 @@ Due dates are shown on task rows too: `due Aug 30` for an all-day task and
 | `defaultCalendarId` | `""` | dcal calendar ID that new tasks are created in. Empty disables task creation. |
 | `defaultView` | `all` | Which tasks the launcher lists before you type. `all` shows everything, `today` shows tasks due today or already overdue, `defaultList` shows only the default task list. Typing a query always searches everything. |
 | `showCompleted` | `false` | When true, completed tasks are listed below the open ones, most recently completed first. |
+
+Time formatting is not listed here because it is not a setting of this
+plugin — see **Clock format** above.
 
 `defaultView: today` hides undated tasks — with no due date there is nothing
 placing a task in today. All-day due dates are compared as calendar dates, so
@@ -156,7 +179,15 @@ building launcher rows, encoding/decoding the action strings used by
 covered by `tests/tst_TaskItems.qml`. Reading a due date out of typed text
 lives in `DateParser.js`, is likewise pure, takes its clock as an argument
 (`nowMs`) so every case is deterministic, and is covered by
-`tests/tst_DateParser.qml`. Everything with a side effect — the
+`tests/tst_DateParser.qml`. `SettingsData.use24HourClock` reaches
+`TaskItems.dueLabel` as a plain boolean on the state object for the same
+reason: the formatting stays unit tested, and neither JS file gains a Qt
+dependency.
+
+Note that `Qt.formatTime(date, Locale.ShortFormat)` does **not** render a
+locale short time — `Locale.ShortFormat` and `Qt.ISODate` are both `1`, so it
+silently formats as ISO (`18:05:00`). DMS passes an explicit `"HH:mm"` /
+`"h:mm AP"` format string instead, and this plugin formats in plain JS. Everything with a side effect — the
 `Process` calls that shell out to `dcal ipc`, and plugin settings I/O — lives
 in `DcalTasksLauncher.qml` and `DcalTasksSettings.qml` and is not unit
 tested; it is exercised manually by loading the plugin in DMS.

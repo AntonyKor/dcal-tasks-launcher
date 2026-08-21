@@ -1002,4 +1002,53 @@ TestCase {
         }), "")
         compare(items[0].comment, "Chores · due Feb 21, 6:00 PM")
     }
+
+    // DMS exposes SettingsData.use24HourClock ("auto" resolves it from the
+    // locale); the launcher passes it in so this stays pure and testable.
+    function test_dueLabel_twentyFourHourPadsTheHour() {
+        compare(TaskItems.dueLabel(new Date(2026, 1, 21, 18, 0, 0).toISOString(), false, true),
+                "Feb 21, 18:00")
+        compare(TaskItems.dueLabel(new Date(2026, 1, 21, 9, 30, 0).toISOString(), false, true),
+                "Feb 21, 09:30")
+        compare(TaskItems.dueLabel(new Date(2026, 1, 21, 0, 5, 0).toISOString(), false, true),
+                "Feb 21, 00:05")
+    }
+
+    function test_dueLabel_twelveHourIsUnchanged() {
+        compare(TaskItems.dueLabel(new Date(2026, 1, 21, 18, 0, 0).toISOString(), false, false),
+                "Feb 21, 6:00 PM")
+    }
+
+    // An all-day due has no time either way, so the flag cannot change it.
+    function test_dueLabel_allDayIgnoresTheClockFormat() {
+        compare(TaskItems.dueLabel("2026-02-21T00:00:00Z", true, true), "Feb 21")
+        compare(TaskItems.dueLabel("2026-02-21T00:00:00Z", true, false), "Feb 21")
+    }
+
+    function test_buildItems_createPreviewUsesTwentyFourHourClock() {
+        var items = TaskItems.buildItems(
+            readyState({nowMs: friMorning, use24Hour: true}),
+            "publish tasks plugin tomorrow at 18:00")
+        compare(items[0].name, "Create task: publish tasks plugin")
+        compare(items[0].comment, "in Chores · due Aug 22, 18:00")
+    }
+
+    function test_buildItems_taskRowUsesTwentyFourHourClock() {
+        var local = new Date(2026, 1, 21, 18, 0, 0)
+        var items = TaskItems.buildItems(readyState({
+            use24Hour: true,
+            tasks: [makeTask({id: "a", summary: "Alpha", allDay: false,
+                              due: local.toISOString()})]
+        }), "")
+        compare(items[0].comment, "Chores · due Feb 21, 18:00")
+    }
+
+    function test_selectTasks_passesTheClockFormatThrough() {
+        var local = new Date(2026, 1, 21, 18, 0, 0)
+        var tasks = [makeTask({id: "a", summary: "Alpha", due: local.toISOString()})]
+        compare(TaskItems.selectTasks(tasks, cals, "", false, null, true).open[0].due,
+                "Feb 21, 18:00")
+        compare(TaskItems.selectTasks(tasks, cals, "", false, null, false).open[0].due,
+                "Feb 21, 6:00 PM")
+    }
 }

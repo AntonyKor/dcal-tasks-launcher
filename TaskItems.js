@@ -58,7 +58,9 @@ var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
 // dcal writes all-day values as UTC midnight ("2026-02-21T00:00:00Z"), so an
 // all-day date must be read with the UTC getters or it renders as the previous
 // day west of UTC. Timed values are genuine instants and render in local time.
-function dueLabel(due, allDay) {
+// use24Hour comes from DMS's SettingsData.use24HourClock, passed in rather
+// than read here so this file keeps its no-Qt, no-singleton guarantee.
+function dueLabel(due, allDay, use24Hour) {
     if (!due)
         return ""
     var d = new Date(due)
@@ -70,17 +72,22 @@ function dueLabel(due, allDay) {
     if (allDay)
         return MONTHS[d.getUTCMonth()] + " " + d.getUTCDate()
 
-    return MONTHS[d.getMonth()] + " " + d.getDate() + ", " + _timeLabel(d)
+    return MONTHS[d.getMonth()] + " " + d.getDate() + ", " + _timeLabel(d, use24Hour)
 }
 
-// 12-hour, to read back the way the input is typed ("... at 6PM").
-function _timeLabel(d) {
+// Mirrors what DMS itself renders: "HH:mm" or "h:mm AP".
+function _timeLabel(d, use24Hour) {
     var hour = d.getHours()
+    var minute = d.getMinutes()
+    var mm = (minute < 10 ? "0" : "") + minute
+
+    if (use24Hour)
+        return (hour < 10 ? "0" : "") + hour + ":" + mm
+
     var hour12 = hour % 12
     if (hour12 === 0)
         hour12 = 12
-    var minute = d.getMinutes()
-    return hour12 + ":" + (minute < 10 ? "0" : "") + minute + (hour < 12 ? " AM" : " PM")
+    return hour12 + ":" + mm + (hour < 12 ? " AM" : " PM")
 }
 
 // A calendar hidden in dcal, or excluded from sync (which purges its local
@@ -158,7 +165,7 @@ function _isDueByEndOfToday(due, allDay, nowMs) {
     return d.getTime() < endOfToday.getTime()
 }
 
-function selectTasks(tasks, calendars, query, showCompleted, view) {
+function selectTasks(tasks, calendars, query, showCompleted, view, use24Hour) {
     var open = []
     var done = []
     var needle = (query || "").toLowerCase()
@@ -189,7 +196,7 @@ function selectTasks(tasks, calendars, query, showCompleted, view) {
         var entry = {
             task: task,
             listName: listName,
-            due: dueLabel(task.due, task.allDay === true)
+            due: dueLabel(task.due, task.allDay === true, use24Hour)
         }
 
         if (task.status === "completed") {
@@ -322,7 +329,8 @@ function buildItems(state, query) {
             items.push(createRows[c])
     }
 
-    var picked = selectTasks(state.tasks, state.calendars, q, state.showCompleted, view)
+    var picked = selectTasks(state.tasks, state.calendars, q, state.showCompleted, view,
+                             state.use24Hour)
 
     for (var i = 0; i < picked.open.length; i++)
         items.push(_taskItem(picked.open[i], false, SCORE_OPEN - i))
@@ -379,7 +387,7 @@ function _createItems(state, query) {
 
     return [
         _createRow("Create task: " + dated.summary,
-                   where + " · due " + dueLabel(dated.due, dated.allDay),
+                   where + " · due " + dueLabel(dated.due, dated.allDay, state.use24Hour),
                    createAction(dated.summary, dated.due, dated.allDay),
                    SCORE_CREATE),
         _createRow("Create task: " + query, where + " · no due date",
