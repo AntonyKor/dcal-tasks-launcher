@@ -151,15 +151,20 @@ plugin reports the loading state rather than a wrong empty list.
    to `TaskItems.parseTasks` / `TaskItems.parseCalendars`, which return
    `{ok, value, error}` rather than throwing.
 4. `getItems` delegates entirely to `TaskItems.buildItems(state, query)`.
+5. When a refresh lands and changes the cache, the plugin emits
+   `pluginService.requestLauncherUpdate("dcalTasks")`. `Controller.qml:135`
+   re-runs `performSearch()` on that signal, so an open launcher repaints with
+   the fresh data; the handler early-returns when the launcher is closed, so a
+   background refresh costs nothing. This is the working equivalent of the
+   contract's `itemsChanged()` signal, which nothing in DMS 1.5.3 listens to.
 
 ### Write path
 
 `executeItem(item)` parses `item.action` as `type:payload`, runs the matching
-`dcal ipc` call, and on process exit invalidates `lastRefreshMs` so the next
-`getItems` refetches. The launcher closes itself after `executeItem`
-(`Controller.qml:2006`), so no in-place list update is needed — and could not
-work anyway, since nothing in DMS 1.5.3 listens to the contract's
-`itemsChanged()` signal.
+`dcal ipc` call, and on process exit invalidates `lastRefreshMs` and triggers a
+refresh. The launcher closes itself after `executeItem` (`Controller.qml:2006`),
+so the refreshed cache is normally observed on the next open rather than in
+place.
 
 Action strings:
 
@@ -234,9 +239,15 @@ The launcher surface re-reads all three in `loadSettings()`, called from
 
 ## Testing
 
-**Unit — `qmltestrunner tests/`** (the binary is present at
-`/usr/bin/qmltestrunner`). Fixtures are real captured `tasks.list` and
-`calendars.list` payloads. Cases:
+**Unit — `qmltestrunner`.** Use the **Qt6** runner at
+`/usr/lib/qt6/bin/qmltestrunner`; `/usr/bin/qmltestrunner` is the Qt5 build from
+`qt5-declarative` and exits 1 with no output at all against Qt6 QML. Run headless:
+
+```bash
+QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests
+```
+
+Fixtures are real captured `tasks.list` and `calendars.list` payloads. Cases:
 
 - parse: valid payload, malformed JSON, empty `tasks`, a bare array from
   `calendars.list`, and stderr-only output.
