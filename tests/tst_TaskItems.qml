@@ -78,4 +78,33 @@ TestCase {
         var r = TaskItems.parseCalendars('nope')
         verify(!r.ok)
     }
+
+    // dcal serialises all-day values as UTC midnight. Reading those with local
+    // getters shows the previous day for anyone west of UTC, so all-day values
+    // must be read with the UTC getters. This test would fail under TZ=America/
+    // Los_Angeles if that shift were missing, and passes in every zone with it.
+    function test_dueLabel_allDayUsesUtcCalendarDate() {
+        compare(TaskItems.dueLabel("2026-02-21T00:00:00Z", true), "Feb 21")
+    }
+
+    function test_dueLabel_allDayIsTimezoneIndependent() {
+        compare(TaskItems.dueLabel("2026-12-31T00:00:00Z", true), "Dec 31")
+        compare(TaskItems.dueLabel("2026-01-01T00:00:00Z", true), "Jan 1")
+    }
+
+    // Built from a local Date so the expectation holds in any zone.
+    function test_dueLabel_timedUsesLocalCalendarDate() {
+        var local = new Date(2026, 1, 21, 15, 30, 0)
+        compare(TaskItems.dueLabel(local.toISOString(), false), "Feb 21")
+    }
+
+    function test_dueLabel_emptyWhenNoDueDate() {
+        compare(TaskItems.dueLabel("", true), "")
+        compare(TaskItems.dueLabel(undefined, false), "")
+        compare(TaskItems.dueLabel(null, false), "")
+    }
+
+    function test_dueLabel_emptyWhenUnparseable() {
+        compare(TaskItems.dueLabel("not-a-date", true), "")
+    }
 }

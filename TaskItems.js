@@ -44,3 +44,21 @@ function _parseJson(text) {
         return {ok: false, value: null, error: String(e.message || e)}
     }
 }
+
+var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+              "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+// dcal writes all-day values as UTC midnight ("2026-02-21T00:00:00Z"), so an
+// all-day date must be read with the UTC getters or it renders as the previous
+// day west of UTC. Timed values are genuine instants and render in local time.
+function dueLabel(due, allDay) {
+    if (!due)
+        return ""
+    var d = new Date(due)
+    if (isNaN(d.getTime()))
+        return ""
+
+    var month = allDay ? d.getUTCMonth() : d.getMonth()
+    var day = allDay ? d.getUTCDate() : d.getDate()
+    return MONTHS[month] + " " + day
+}
