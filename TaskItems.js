@@ -321,3 +321,50 @@ function taskListOptions(calendars) {
     })
     return options
 }
+
+// dcal is a cobra CLI: a failed call prints "Error: ipc error: <reason>" and
+// then dumps its whole usage text, which is useless in a toast. Pull out the
+// reason and drop the rest.
+function dcalErrorDetail(stderrText) {
+    var text = (stderrText || "").trim()
+    if (text.length === 0)
+        return "dcal gave no error output."
+
+    var lines = text.split("\n")
+    var picked = ""
+    var firstNonEmpty = ""
+    for (var i = 0; i < lines.length; i++) {
+        var line = lines[i].trim()
+        if (line.length === 0)
+            continue
+        if (firstNonEmpty.length === 0)
+            firstNonEmpty = line
+        if (line.indexOf("Error:") === 0) {
+            picked = line.substring("Error:".length).trim()
+            break
+        }
+    }
+    if (picked.length === 0)
+        picked = firstNonEmpty
+
+    if (picked.indexOf("ipc error:") === 0)
+        picked = picked.substring("ipc error:".length).trim()
+
+    // Strip the Go sentinel prefix ("ErrNotFound: calendar not found").
+    var sentinel = picked.match(/^Err[A-Za-z]+:\s*/)
+    if (sentinel && picked.length > sentinel[0].length)
+        picked = picked.substring(sentinel[0].length)
+
+    return picked.length > 0 ? picked : text
+}
+
+// Toast content for a failed tasks.create / tasks.complete. The launcher has
+// already closed by the time these land, so a toast is the only surface left.
+function mutationFailure(actionType, stderrText) {
+    return {
+        message: actionType === "create"
+            ? "Could not create the task"
+            : "Could not update the task",
+        details: dcalErrorDetail(stderrText)
+    }
+}

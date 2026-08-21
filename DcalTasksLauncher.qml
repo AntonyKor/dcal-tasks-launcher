@@ -1,5 +1,6 @@
 import QtQuick
 import Quickshell.Io
+import qs.Services
 import "TaskItems.js" as TaskItems
 
 Item {
@@ -81,11 +82,13 @@ Item {
         if (parsed.type === "create") {
             if (!defaultCalendarId)
                 return
+            mutateProcess.actionType = "create"
             mutateProcess.command = ["dcal", "ipc", "tasks.create",
                                      "calendarId=" + defaultCalendarId,
                                      "summary=" + parsed.summary]
             mutateProcess.running = true
         } else if (parsed.type === "toggle") {
+            mutateProcess.actionType = "toggle"
             mutateProcess.command = ["dcal", "ipc", "tasks.complete",
                                      "id=" + parsed.id,
                                      "completed=" + (parsed.completed ? "true" : "false")]
@@ -207,12 +210,43 @@ Item {
         id: mutateProcess
         running: false
 
+        property string actionType: ""
+        // Same start-failure trap as the read processes: when the binary cannot
+        // be started, Quickshell fires neither exited nor streamFinished.
+        property bool settled: false
+
+        stderr: StdioCollector {
+            id: mutateStderr
+        }
+
+        onRunningChanged: {
+            if (running) {
+                settled = false
+            } else if (!settled) {
+                root.reportMutationFailure("")
+            }
+        }
+
         // Force the next getItems to refetch rather than serve the pre-mutation
         // cache. The launcher normally closes right after executeItem, so this
         // is usually observed on the next open.
-        onExited: {
+        onExited: exitCode => {
+            settled = true
+            if (exitCode !== 0)
+                root.reportMutationFailure(mutateStderr.text)
+
             root.lastRefreshMs = 0
             root.refresh()
         }
+    }
+
+    // The launcher closes itself the moment executeItem returns, so a toast is
+    // the only surface left to tell the user the write did not happen.
+    function reportMutationFailure(stderrText) {
+        const failure = TaskItems.mutationFailure(mutateProcess.actionType, stderrText)
+        if (typeof ToastService !== "undefined")
+            ToastService.showError(failure.message, failure.details)
+        else
+            console.warn("dcalTasks:", failure.message, "-", failure.details)
     }
 }

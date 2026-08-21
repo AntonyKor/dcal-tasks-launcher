@@ -630,4 +630,48 @@ TestCase {
         var r = TaskItems.selectTasks(tasks, {}, "", false)
         compare(r.open.length, 1)
     }
+
+    readonly property string cobraFailure: 'Error: ipc error: ErrNotFound: calendar not found\n' +
+        'Usage:\n  dcal ipc <method> [key=value...]\n\nFlags:\n  -h, --help   help for ipc\n'
+
+    function test_dcalErrorDetail_extractsReasonAndDropsUsageDump() {
+        compare(TaskItems.dcalErrorDetail(cobraFailure), "calendar not found")
+    }
+
+    function test_dcalErrorDetail_stripsIpcErrorPrefixWithoutSentinel() {
+        compare(TaskItems.dcalErrorDetail("Error: ipc error: daemon not running"),
+                "daemon not running")
+    }
+
+    function test_dcalErrorDetail_keepsPlainErrorLine() {
+        compare(TaskItems.dcalErrorDetail("Error: something broke"), "something broke")
+    }
+
+    function test_dcalErrorDetail_fallsBackToFirstNonEmptyLine() {
+        compare(TaskItems.dcalErrorDetail("\n  permission denied\nmore noise\n"),
+                "permission denied")
+    }
+
+    function test_dcalErrorDetail_handlesEmptyStderr() {
+        compare(TaskItems.dcalErrorDetail(""), "dcal gave no error output.")
+        compare(TaskItems.dcalErrorDetail("   \n  "), "dcal gave no error output.")
+        compare(TaskItems.dcalErrorDetail(undefined), "dcal gave no error output.")
+    }
+
+    // A bare sentinel with nothing after it must not strip down to "".
+    function test_dcalErrorDetail_keepsBareSentinel() {
+        compare(TaskItems.dcalErrorDetail("Error: ErrNotFound:"), "ErrNotFound:")
+    }
+
+    function test_mutationFailure_createHeadline() {
+        var f = TaskItems.mutationFailure("create", cobraFailure)
+        compare(f.message, "Could not create the task")
+        compare(f.details, "calendar not found")
+    }
+
+    function test_mutationFailure_toggleHeadline() {
+        var f = TaskItems.mutationFailure("toggle", "Error: ipc error: task has no calendar")
+        compare(f.message, "Could not update the task")
+        compare(f.details, "task has no calendar")
+    }
 }

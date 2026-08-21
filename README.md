@@ -69,6 +69,10 @@ which one is set as default.
 | `defaultCalendarId` | `""` | dcal calendar ID that new tasks are created in. Empty disables task creation. |
 | `showCompleted` | `false` | When true, completed tasks are listed below the open ones, most recently completed first. |
 
+A failed create or complete raises an error toast naming the reason dcal
+gave. The launcher closes as soon as you press Enter, so the toast is the
+only place that failure can surface.
+
 ## Not supported yet
 
 - Setting a due date when creating a task
