@@ -77,7 +77,74 @@ function isUsableTaskList(cal) {
         && !cal.hidden && !cal.syncDisabled
 }
 
-function selectTasks(tasks, calendars, query, showCompleted) {
+// view is the resolved default view from resolveView(), or undefined for the
+// unfiltered "all" behaviour. It narrows the no-query list only: buildItems
+// passes it through untouched for an empty query and drops it once the user
+// types, so a filter can never hide something being searched for.
+var VIEW_ALL = "all"
+var VIEW_TODAY = "today"
+var VIEW_DEFAULT_LIST = "defaultList"
+
+// Resolves the configured defaultView against the state it needs to work.
+// A view that cannot be honoured degrades to "all" rather than to an empty
+// launcher: "today" without a clock, "defaultList" with no default set, and
+// "defaultList" pointing at a list dcal no longer has are all
+// misconfigurations, not filters the user asked for.
+function resolveView(state) {
+    var mode = state.defaultView || VIEW_ALL
+    var defaultCalendarId = state.defaultCalendarId || ""
+    var nowMs = state.nowMs
+
+    if (mode === VIEW_TODAY && typeof nowMs === "number" && isFinite(nowMs))
+        return {mode: VIEW_TODAY, defaultCalendarId: defaultCalendarId, nowMs: nowMs}
+
+    // An id we cannot resolve while calendars are still loading means "not
+    // fetched yet", so keep filtering by it — same optimism as _createItem.
+    var cals = state.calendars || {}
+    if (mode === VIEW_DEFAULT_LIST && defaultCalendarId.length > 0
+        && !(state.calendarsLoaded && !cals[defaultCalendarId]))
+        return {mode: VIEW_DEFAULT_LIST, defaultCalendarId: defaultCalendarId, nowMs: nowMs}
+
+    return {mode: VIEW_ALL, defaultCalendarId: defaultCalendarId, nowMs: nowMs}
+}
+
+function _matchesView(task, view) {
+    if (!view || view.mode === VIEW_ALL)
+        return true
+    if (view.mode === VIEW_DEFAULT_LIST)
+        return task.calendarId === view.defaultCalendarId
+    if (view.mode === VIEW_TODAY)
+        return _isDueByEndOfToday(task.due, task.allDay === true, view.nowMs)
+    return true
+}
+
+// Due today or already overdue. Undated and unparseable dues are out: with no
+// date there is nothing placing the task in today.
+//
+// dcal writes all-day dues as UTC midnight, so their calendar date must be
+// read with the UTC getters (see dueLabel) and compared against today's local
+// calendar date. A timed due is a real instant, so it is compared against
+// local midnight tonight.
+function _isDueByEndOfToday(due, allDay, nowMs) {
+    if (!due)
+        return false
+    var d = new Date(due)
+    if (isNaN(d.getTime()))
+        return false
+
+    var now = new Date(nowMs)
+    if (allDay) {
+        var dueDay = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+        var today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())
+        return dueDay <= today
+    }
+
+    // Day + 1 rolls the month and year over on its own.
+    var endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1)
+    return d.getTime() < endOfToday.getTime()
+}
+
+function selectTasks(tasks, calendars, query, showCompleted, view) {
     var open = []
     var done = []
     var needle = (query || "").toLowerCase()
@@ -87,6 +154,9 @@ function selectTasks(tasks, calendars, query, showCompleted) {
     for (var i = 0; i < list.length; i++) {
         var task = list[i]
         if (!task || task.status === "cancelled")
+            continue
+
+        if (!_matchesView(task, view))
             continue
 
         var cal = cals[task.calendarId]
@@ -210,10 +280,13 @@ function buildItems(state, query) {
         return [_noopItem("Loading tasks…", "")]
 
     var items = []
+    // The default view narrows the list you get for free; typing means you are
+    // looking for something, so a query searches everything.
+    var view = q.length > 0 ? null : resolveView(state)
     if (q.length > 0)
         items.push(_createItem(state, q))
 
-    var picked = selectTasks(state.tasks, state.calendars, q, state.showCompleted)
+    var picked = selectTasks(state.tasks, state.calendars, q, state.showCompleted, view)
 
     for (var i = 0; i < picked.open.length; i++)
         items.push(_taskItem(picked.open[i], false, SCORE_OPEN - i))
@@ -222,9 +295,26 @@ function buildItems(state, query) {
         items.push(_taskItem(picked.done[j], true, SCORE_DONE - j))
 
     if (items.length === 0)
-        items.push(_noopItem("No tasks", "Type to create one"))
+        items.push(_emptyItem(state, view))
 
     return items
+}
+
+// A list emptied by the default view has to say so, or it reads as "you have
+// no tasks" when the tasks are merely filtered out.
+function _emptyItem(state, view) {
+    var mode = view ? view.mode : VIEW_ALL
+    if (mode === VIEW_TODAY)
+        return _noopItem("Nothing due today", "Type to search all tasks")
+
+    if (mode === VIEW_DEFAULT_LIST) {
+        var cals = state.calendars || {}
+        var cal = cals[view.defaultCalendarId]
+        return _noopItem(cal && cal.name ? "Nothing in " + cal.name : "Nothing in this list",
+                         "Type to search all tasks")
+    }
+
+    return _noopItem("No tasks", "Type to create one")
 }
 
 function _createItem(state, query) {

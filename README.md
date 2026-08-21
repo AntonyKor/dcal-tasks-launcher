@@ -53,9 +53,11 @@ which one is set as default.
 
 ## Usage
 
-- Type `;` (or your configured trigger) to list open tasks.
+- Type `;` (or your configured trigger) to list open tasks. Which tasks that
+  first list holds is set by **Show by default** (see Settings).
 - Type `;<text>` to filter by task summary or calendar name, and to get
-  `Create task: <text>` as the first result.
+  `Create task: <text>` as the first result. Searching always covers every
+  task, whatever **Show by default** is set to.
 - Press Enter on a task to toggle it: open tasks are marked complete,
   completed tasks are reopened.
 - Press Enter on `Create task: <text>` to create a task with that summary in
@@ -67,7 +69,17 @@ which one is set as default.
 |---|---|---|
 | `trigger` | `;` | Prefix that opens this launcher in DMS. Reload the plugin after changing it. |
 | `defaultCalendarId` | `""` | dcal calendar ID that new tasks are created in. Empty disables task creation. |
+| `defaultView` | `all` | Which tasks the launcher lists before you type. `all` shows everything, `today` shows tasks due today or already overdue, `defaultList` shows only the default task list. Typing a query always searches everything. |
 | `showCompleted` | `false` | When true, completed tasks are listed below the open ones, most recently completed first. |
+
+`defaultView: today` hides undated tasks — with no due date there is nothing
+placing a task in today. All-day due dates are compared as calendar dates, so
+a task due today stays visible all day regardless of your timezone.
+
+`defaultView: defaultList` falls back to showing all tasks when no default
+task list is set, or when the one that is set no longer exists in dcal. That
+is a misconfiguration rather than a filter, and honouring it would leave the
+launcher permanently empty with no explanation.
 
 A failed create or complete raises an error toast naming the reason dcal
 gave. The launcher closes as soon as you press Enter, so the toast is the

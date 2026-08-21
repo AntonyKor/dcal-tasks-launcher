@@ -15,6 +15,7 @@ Item {
 
     property string defaultCalendarId: ""
     property bool showCompleted: false
+    property string defaultView: "all"
 
     property var tasks: []
     property var calendars: ({})
@@ -58,6 +59,7 @@ Item {
         trigger = pluginService.loadPluginData(pluginName, "trigger", ";")
         defaultCalendarId = pluginService.loadPluginData(pluginName, "defaultCalendarId", "")
         showCompleted = pluginService.loadPluginData(pluginName, "showCompleted", false) === true
+        defaultView = pluginService.loadPluginData(pluginName, "defaultView", "all")
     }
 
     // The DMS launcher calls this synchronously on every keystroke, so it must
@@ -72,7 +74,9 @@ Item {
             tasks: root.tasks,
             calendars: root.calendars,
             defaultCalendarId: root.defaultCalendarId,
-            showCompleted: root.showCompleted
+            showCompleted: root.showCompleted,
+            defaultView: root.defaultView,
+            nowMs: Date.now()
         }, query || "")
     }
 

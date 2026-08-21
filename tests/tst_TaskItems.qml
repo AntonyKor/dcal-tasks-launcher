@@ -244,6 +244,120 @@ TestCase {
         compare(r.open[0].listName, "")
     }
 
+    // Aug 21 12:00 UTC. "Today" is a local calendar date, so the expectations
+    // below hold for any run whose local date at this instant is Aug 21 —
+    // offsets from -12:00 to +11:59, which covers the documented test matrix
+    // (default, UTC, America/Los_Angeles). Far enough east, e.g.
+    // Pacific/Auckland at +12, the local date is already Aug 22 and the
+    // all-day boundary case legitimately flips.
+    readonly property double nowMs: Date.parse("2026-08-21T12:00:00Z")
+
+    function todayView() {
+        return {mode: "today", defaultCalendarId: "", nowMs: nowMs}
+    }
+
+    function test_selectTasks_todayViewKeepsOverdue() {
+        var tasks = [makeTask({id: "a", summary: "Alpha",
+                               due: "2026-08-19T12:00:00Z"})]
+        var r = TaskItems.selectTasks(tasks, cals, "", false, todayView())
+        compare(r.open.length, 1)
+        compare(r.open[0].task.id, "a")
+    }
+
+    // Half an hour after nowMs, which is still before local midnight at every
+    // offset the test suite runs at. A later-in-the-day instant is not safe:
+    // 23:00Z is already tomorrow east of UTC.
+    function test_selectTasks_todayViewKeepsTimedDueLaterToday() {
+        var tasks = [makeTask({id: "a", summary: "Alpha",
+                               due: "2026-08-21T12:30:00Z"})]
+        var r = TaskItems.selectTasks(tasks, cals, "", false, todayView())
+        compare(r.open.length, 1)
+    }
+
+    function test_selectTasks_todayViewDropsFutureTask() {
+        var tasks = [makeTask({id: "a", summary: "Alpha",
+                               due: "2026-08-23T12:00:00Z"})]
+        var r = TaskItems.selectTasks(tasks, cals, "", false, todayView())
+        compare(r.open.length, 0)
+    }
+
+    function test_selectTasks_todayViewDropsUndatedTask() {
+        var tasks = [makeTask({id: "a", summary: "Alpha"})]
+        var r = TaskItems.selectTasks(tasks, cals, "", false, todayView())
+        compare(r.open.length, 0)
+    }
+
+    function test_selectTasks_todayViewKeepsAllDayDueToday() {
+        var tasks = [makeTask({id: "a", summary: "Alpha", allDay: true,
+                               due: "2026-08-21T00:00:00Z"})]
+        var r = TaskItems.selectTasks(tasks, cals, "", false, todayView())
+        compare(r.open.length, 1)
+    }
+
+    // Reading this all-day due with local getters instead of UTC getters puts
+    // it on Aug 21 west of UTC, which would wrongly show it as due today. Only
+    // catches the bug under TZ=America/Los_Angeles — see dueLabel's tests.
+    function test_selectTasks_todayViewAllDayIsTimezoneIndependent() {
+        var tasks = [makeTask({id: "a", summary: "Alpha", allDay: true,
+                               due: "2026-08-22T00:00:00Z"})]
+        var r = TaskItems.selectTasks(tasks, cals, "", false, todayView())
+        compare(r.open.length, 0)
+    }
+
+    function test_selectTasks_todayViewAlsoFiltersCompleted() {
+        var tasks = [
+            makeTask({id: "a", summary: "Alpha", status: "completed",
+                      completed: "2026-08-21T10:00:00Z",
+                      due: "2026-08-19T12:00:00Z"}),
+            makeTask({id: "b", summary: "Bravo", status: "completed",
+                      completed: "2026-08-21T10:00:00Z",
+                      due: "2026-08-23T12:00:00Z"})
+        ]
+        var r = TaskItems.selectTasks(tasks, cals, "", true, todayView())
+        compare(r.done.length, 1)
+        compare(r.done[0].task.id, "a")
+    }
+
+    function test_selectTasks_todayViewIgnoresUnparseableDue() {
+        var tasks = [makeTask({id: "a", summary: "Alpha", due: "not a date"})]
+        var r = TaskItems.selectTasks(tasks, cals, "", false, todayView())
+        compare(r.open.length, 0)
+    }
+
+    function test_selectTasks_defaultListViewKeepsOnlyThatList() {
+        var tasks = [
+            makeTask({id: "a", summary: "Alpha", calendarId: "cal-chores"}),
+            makeTask({id: "b", summary: "Bravo", calendarId: "cal-fitness"})
+        ]
+        var r = TaskItems.selectTasks(tasks, cals, "", false,
+                                      {mode: "defaultList",
+                                       defaultCalendarId: "cal-chores",
+                                       nowMs: nowMs})
+        compare(r.open.length, 1)
+        compare(r.open[0].task.id, "a")
+    }
+
+    function test_selectTasks_allViewKeepsEverything() {
+        var tasks = [
+            makeTask({id: "a", summary: "Alpha", calendarId: "cal-chores"}),
+            makeTask({id: "b", summary: "Bravo", calendarId: "cal-fitness",
+                      due: "2026-08-23T12:00:00Z"})
+        ]
+        var r = TaskItems.selectTasks(tasks, cals, "", false,
+                                      {mode: "all", defaultCalendarId: "cal-chores",
+                                       nowMs: nowMs})
+        compare(r.open.length, 2)
+    }
+
+    function test_selectTasks_omittedViewKeepsEverything() {
+        var tasks = [
+            makeTask({id: "a", summary: "Alpha"}),
+            makeTask({id: "b", summary: "Bravo", calendarId: "cal-fitness"})
+        ]
+        var r = TaskItems.selectTasks(tasks, cals, "", false)
+        compare(r.open.length, 2)
+    }
+
     function test_createAction_roundTrips() {
         var a = TaskItems.createAction("buy milk")
         var p = TaskItems.parseAction(a)
@@ -512,6 +626,109 @@ TestCase {
         var items = TaskItems.buildItems(readyState({tasks: []}), "zzz")
         compare(items.length, 1)
         compare(items[0].action, "create:zzz")
+    }
+
+    readonly property var viewTasks: [
+        makeTask({id: "today", summary: "Due today", calendarId: "cal-chores",
+                  due: "2026-08-21T09:00:00Z"}),
+        makeTask({id: "later", summary: "Due later", calendarId: "cal-fitness",
+                  due: "2026-08-30T09:00:00Z"})
+    ]
+
+    function test_buildItems_defaultsToAllTasksWhenViewUnset() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: viewTasks, nowMs: nowMs}), "")
+        compare(items.length, 2)
+    }
+
+    function test_buildItems_todayViewFiltersTheNoQueryList() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: viewTasks, defaultView: "today", nowMs: nowMs}), "")
+        compare(items.length, 1)
+        compare(items[0].name, "Due today")
+    }
+
+    function test_buildItems_defaultListViewFiltersTheNoQueryList() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: viewTasks, defaultView: "defaultList",
+                        defaultCalendarId: "cal-fitness", nowMs: nowMs}), "")
+        compare(items.length, 1)
+        compare(items[0].name, "Due later")
+    }
+
+    function test_buildItems_queryBypassesTodayView() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: viewTasks, defaultView: "today", nowMs: nowMs}),
+            "due")
+        compare(items.length, 3)
+        compare(items[1].name, "Due today")
+        compare(items[2].name, "Due later")
+    }
+
+    function test_buildItems_queryBypassesDefaultListView() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: viewTasks, defaultView: "defaultList",
+                        defaultCalendarId: "cal-fitness", nowMs: nowMs}),
+            "due")
+        compare(items.length, 3)
+    }
+
+    function test_buildItems_todayViewEmptyStateExplainsTheFilter() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: [viewTasks[1]], defaultView: "today", nowMs: nowMs}),
+            "")
+        compare(items.length, 1)
+        compare(items[0].name, "Nothing due today")
+        compare(items[0].comment, "Type to search all tasks")
+        compare(items[0].action, "noop")
+    }
+
+    function test_buildItems_defaultListViewEmptyStateNamesTheList() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: [viewTasks[1]], defaultView: "defaultList",
+                        defaultCalendarId: "cal-chores", nowMs: nowMs}), "")
+        compare(items.length, 1)
+        compare(items[0].name, "Nothing in Chores")
+        compare(items[0].comment, "Type to search all tasks")
+    }
+
+    // An unset or deleted default list is a misconfiguration, not a filter.
+    // Honouring it would leave the launcher permanently empty with no hint.
+    function test_buildItems_defaultListViewFallsBackToAllWhenUnset() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: viewTasks, defaultView: "defaultList",
+                        defaultCalendarId: "", nowMs: nowMs}), "")
+        compare(items.length, 2)
+    }
+
+    function test_buildItems_defaultListViewFallsBackToAllWhenListDeleted() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: viewTasks, defaultView: "defaultList",
+                        defaultCalendarId: "cal-deleted", nowMs: nowMs}), "")
+        compare(items.length, 2)
+    }
+
+    // Calendars arrive on a separate IPC call; an id we cannot resolve yet is
+    // "not loaded", so keep filtering by it rather than dropping the view.
+    function test_buildItems_defaultListViewFiltersBeforeCalendarsLoad() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: viewTasks, calendarsLoaded: false, calendars: {},
+                        defaultView: "defaultList",
+                        defaultCalendarId: "cal-chores", nowMs: nowMs}), "")
+        compare(items.length, 1)
+        compare(items[0].name, "Due today")
+    }
+
+    function test_buildItems_todayViewFallsBackToAllWithoutAClock() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: viewTasks, defaultView: "today"}), "")
+        compare(items.length, 2)
+    }
+
+    function test_buildItems_unknownViewFallsBackToAll() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: viewTasks, defaultView: "nonsense", nowMs: nowMs}), "")
+        compare(items.length, 2)
     }
 
     readonly property var writableCals: ({

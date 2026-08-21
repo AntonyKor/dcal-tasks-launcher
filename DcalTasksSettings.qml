@@ -93,6 +93,18 @@ PluginSettings {
         wrapMode: Text.WordWrap
     }
 
+    SelectionSetting {
+        settingKey: "defaultView"
+        label: "Show by default"
+        description: "Which tasks are listed before you type anything. Searching always covers every list."
+        defaultValue: "all"
+        options: [
+            {label: "All tasks", value: "all"},
+            {label: "Due today and overdue", value: "today"},
+            {label: "Default task list only", value: "defaultList"}
+        ]
+    }
+
     ToggleSetting {
         settingKey: "showCompleted"
         label: "Show completed tasks"
