@@ -219,22 +219,32 @@ var _DATE_RULES = [
         }
     },
     {
-        // "30/8", "30/8/2026", "30.8.26" — day first, which is what makes
-        // "2/9" the second of September. The other reading needs the year.
+        // "30/8", "2/9", "30.8.26". The only genuinely ambiguous form: which
+        // number is the day comes from the locale (see dayFirst). A reading
+        // that cannot be a date falls back to the other one, so "30/8" still
+        // lands under a month-first locale — there is no month 30.
         re: new RegExp("(?:^|\\s)" + _CONNECTOR + "(\\d{1,2})([\\/.])(\\d{1,2})(?:\\2(\\d{2,4}))?$"),
-        read: function (m, now) {
-            return _calendarDay(m[4] ? _fullYear(m[4]) : now.getFullYear(),
-                                parseInt(m[3], 10) - 1, parseInt(m[1], 10), now, !!m[4])
+        read: function (m, now, dayFirst) {
+            var first = parseInt(m[1], 10)
+            var second = parseInt(m[3], 10)
+            var year = m[4] ? _fullYear(m[4]) : now.getFullYear()
+            var given = !!m[4]
+
+            var asDayFirst = function () { return _calendarDay(year, second - 1, first, now, given) }
+            var asMonthFirst = function () { return _calendarDay(year, first - 1, second, now, given) }
+
+            return dayFirst ? (asDayFirst() || asMonthFirst())
+                            : (asMonthFirst() || asDayFirst())
         }
     }
 ]
 
-function _matchFirst(rules, text, now) {
+function _matchFirst(rules, text, now, dayFirst) {
     for (var i = 0; i < rules.length; i++) {
         var m = rules[i].re.exec(text)
         if (!m)
             continue
-        var value = rules[i].read(m, now)
+        var value = rules[i].read(m, now, dayFirst)
         if (!value)
             continue
         // m.index sits on the leading space (or 0 at the start of the string),
@@ -248,7 +258,11 @@ function _matchFirst(rules, text, now) {
 // Returns null when nothing trailing reads as a date, or
 // {summary, due, allDay} when it does. summary may be empty — the caller
 // decides whether a date with no title is worth offering.
-function parseTrailingDate(text, nowMs) {
+//
+// dayFirst decides only how a bare "2/9" is read, and comes from the locale's
+// own short date format. It defaults to true, the way most locales write a
+// date; the launcher always passes the real value.
+function parseTrailingDate(text, nowMs, dayFirst) {
     var s = typeof text === "string" ? text : ""
     if (s.trim().length === 0)
         return null
@@ -259,7 +273,7 @@ function parseTrailingDate(text, nowMs) {
 
     var time = _matchFirst(_TIME_RULES, s, now)
     var head = time ? s.substring(0, time.index) : s
-    var date = _matchFirst(_DATE_RULES, head, now)
+    var date = _matchFirst(_DATE_RULES, head, now, dayFirst !== false)
 
     if (!date && !time)
         return null

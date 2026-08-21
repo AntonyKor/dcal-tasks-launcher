@@ -196,8 +196,9 @@ TestCase {
         verifyAllDay(DateParser.parseTrailingDate("renew passport 30/8", friMorning), 2026, 7, 30)
     }
 
-    // Pins the ambiguous case: 2/9 is 2 September, never 9 February.
-    function test_ambiguousSlashDateIsDayFirst() {
+    // Pins the default when no order is passed: day-first, as most locales
+    // write dates. The launcher always passes the locale's order explicitly.
+    function test_ambiguousSlashDateIsDayFirstByDefault() {
         verifyAllDay(DateParser.parseTrailingDate("renew passport 2/9", friMorning), 2026, 8, 2)
     }
 
@@ -323,5 +324,50 @@ TestCase {
                     2026, 7, 22, 17, 0)
         verifyTimed(DateParser.parseTrailingDate("standup tomorrow at 5:45", friMorning),
                     2026, 7, 22, 5, 45)
+    }
+
+    // dayFirst comes from the locale's own short date format, passed in so
+    // this stays pure. en_US is month-first, most other locales are not.
+    function test_monthFirstOrderReadsTheAmbiguousDateTheOtherWay() {
+        // 9 February has already gone, so it rolls into next year.
+        verifyAllDay(DateParser.parseTrailingDate("renew passport 2/9", friMorning, false),
+                     2027, 1, 9)
+    }
+
+    function test_dayFirstOrderReadsTheAmbiguousDateAsDayFirst() {
+        verifyAllDay(DateParser.parseTrailingDate("renew passport 2/9", friMorning, true),
+                     2026, 8, 2)
+    }
+
+    function test_unambiguousDatesAgreeInBothOrders() {
+        verifyAllDay(DateParser.parseTrailingDate("renew passport 12/11", friMorning, false),
+                     2026, 11, 11)
+        verifyAllDay(DateParser.parseTrailingDate("renew passport 12/11", friMorning, true),
+                     2026, 10, 12)
+    }
+
+    // A reading that cannot be a date falls back to the other one, so a date
+    // written the "wrong" way round still lands rather than vanishing.
+    function test_monthFirstFallsBackWhenThereIsNoSuchMonth() {
+        verifyAllDay(DateParser.parseTrailingDate("renew passport 30/8", friMorning, false),
+                     2026, 7, 30)
+    }
+
+    function test_dayFirstFallsBackWhenThereIsNoSuchMonth() {
+        verifyAllDay(DateParser.parseTrailingDate("renew passport 8/30", friMorning, true),
+                     2026, 7, 30)
+    }
+
+    function test_bothOrdersImpossibleIsStillNotADate() {
+        compare(DateParser.parseTrailingDate("split the bill 30/13", friMorning, false), null)
+        compare(DateParser.parseTrailingDate("split the bill 30/13", friMorning, true), null)
+    }
+
+    // Only the bare numeric form is ambiguous; the others cannot be misread.
+    function test_orderDoesNotAffectIsoOrMonthNameDates() {
+        verifyAllDay(DateParser.parseTrailingDate("gym 2026-09-02", friMorning, false),
+                     2026, 8, 2)
+        verifyAllDay(DateParser.parseTrailingDate("gym 2 sep", friMorning, false), 2026, 8, 2)
+        verifyAllDay(DateParser.parseTrailingDate("gym sep 2", friMorning, true), 2026, 8, 2)
     }
 }

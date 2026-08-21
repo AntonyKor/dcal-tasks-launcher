@@ -1051,4 +1051,19 @@ TestCase {
         compare(TaskItems.selectTasks(tasks, cals, "", false, null, false).open[0].due,
                 "Feb 21, 6:00 PM")
     }
+
+    // The locale's date order reaches the parser through the state object,
+    // the same way the clock format reaches dueLabel.
+    function test_buildItems_createPreviewHonoursMonthFirstOrder() {
+        var items = TaskItems.buildItems(
+            readyState({nowMs: friMorning, dayFirst: false}), "renew passport 2/9")
+        compare(items[0].name, "Create task: renew passport")
+        compare(items[0].comment, "in Chores · due Feb 9")
+    }
+
+    function test_buildItems_createPreviewHonoursDayFirstOrder() {
+        var items = TaskItems.buildItems(
+            readyState({nowMs: friMorning, dayFirst: true}), "renew passport 2/9")
+        compare(items[0].comment, "in Chores · due Sep 2")
+    }
 }
