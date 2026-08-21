@@ -62,6 +62,63 @@ which one is set as default.
   completed tasks are reopened.
 - Press Enter on `Create task: <text>` to create a task with that summary in
   the default task list.
+- End the text with a date phrase — `; publish tasks plugin tomorrow at 6PM` —
+  to give the new task a due date. See **Due dates when creating** below.
+
+## Due dates when creating
+
+A date phrase at the **end** of what you type is read as a due date and taken
+out of the task title:
+
+```
+; publish tasks plugin tomorrow at 6PM
+    → "publish tasks plugin"   due Aug 22, 6:00 PM
+```
+
+Only a trailing phrase counts, so `; buy milk for saturday party` keeps its
+saturday and gets no due date.
+
+| You type | You get |
+|---|---|
+| `today`, `tomorrow` | that day, all-day |
+| `tonight` | today at 20:00 |
+| `friday`, `fri`, `on tuesday` | the nearest such weekday, today included |
+| `this friday` | same as bare `friday` |
+| `next friday` | that weekday in the *following* Mon–Sun week |
+| `in 3 days`, `in a week`, `in 2 months` | that far out, all-day |
+| `aug 30`, `august 30th`, `30 aug`, `30 august 2027` | that date |
+| `2026-08-30` | that date |
+| `30/8`, `30/8/26`, `30.8.2026` | that date, **day first** |
+| any of the above + `at 6PM` / `6:30pm` / `at 18:00` | that date, at that time |
+| `at 6PM` on its own | today if 6PM is still ahead, otherwise tomorrow |
+
+A date with no year means the next one to come: `jan 5` typed in August is
+next January, not four months ago. A date that does not exist (`feb 30`,
+`32/8`) is not treated as a date at all.
+
+`2/9` is 2 September, never 9 February — day-first, always. Give a year if
+you want the other reading to be unambiguous to a reader.
+
+### When the guess is wrong
+
+Whenever a date is detected the launcher offers **two** create rows:
+
+```
++ Create task: publish tasks plugin
+  in Inbox · due Aug 22, 6:00 PM
+
++ Create task: publish tasks plugin tomorrow at 6PM
+  in Inbox · no due date
+```
+
+The second row creates the task with the literal text you typed and no due
+date. That is the escape hatch for a task genuinely titled "… tomorrow", and
+it means a wrong guess is one arrow key away from being harmless. A query
+that is *only* a date (`; tomorrow`) has no title left over, so it offers the
+literal row alone.
+
+Due dates are shown on task rows too: `due Aug 30` for an all-day task and
+`due Aug 22, 6:00 PM` for one with a time.
 
 ## Settings
 
@@ -87,7 +144,6 @@ only place that failure can surface.
 
 ## Not supported yet
 
-- Setting a due date when creating a task
 - Editing task text
 - Deleting tasks
 - Subtasks
@@ -97,7 +153,10 @@ only place that failure can surface.
 Pure, decidable logic — parsing dcal's JSON, sorting and filtering tasks,
 building launcher rows, encoding/decoding the action strings used by
 `executeItem` — lives in `TaskItems.js`, has no QML or Qt dependency, and is
-covered by `tests/tst_TaskItems.qml`. Everything with a side effect — the
+covered by `tests/tst_TaskItems.qml`. Reading a due date out of typed text
+lives in `DateParser.js`, is likewise pure, takes its clock as an argument
+(`nowMs`) so every case is deterministic, and is covered by
+`tests/tst_DateParser.qml`. Everything with a side effect — the
 `Process` calls that shell out to `dcal ipc`, and plugin settings I/O — lives
 in `DcalTasksLauncher.qml` and `DcalTasksSettings.qml` and is not unit
 tested; it is exercised manually by loading the plugin in DMS.
@@ -115,7 +174,9 @@ than a wrong binary. Use the full path to the Qt6 binary above, not whatever
 `qmltestrunner` resolves to on `$PATH`.
 
 The all-day due-date tests (`test_dueLabel_allDayUsesUtcCalendarDate` and
-related) only catch a wrong implementation outside UTC. Also run:
+related) and the whole of `tst_DateParser.qml` only catch a wrong
+implementation outside UTC — all-day dues are UTC midnight while timed dues
+are local instants, and the two only diverge away from UTC. Also run:
 
 ```bash
 TZ=America/Los_Angeles QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner -input tests
@@ -124,6 +185,10 @@ TZ=America/Los_Angeles QT_QPA_PLATFORM=offscreen /usr/lib/qt6/bin/qmltestrunner 
 Under `TZ=UTC`, a version of `dueLabel` that reads all-day dates with local
 getters instead of UTC getters passes anyway, because UTC and local agree
 there.
+
+One test — `test_selectTasks_todayViewAllDayIsTimezoneIndependent` — fails at
+`TZ=Pacific/Kiritimati` (UTC+14). That predates the due-date parser and is a
+`defaultView: today` bug, not a formatting one.
 
 ### Reloading during development
 

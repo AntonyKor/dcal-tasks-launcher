@@ -87,9 +87,16 @@ Item {
             if (!defaultCalendarId)
                 return
             mutateProcess.actionType = "create"
-            mutateProcess.command = ["dcal", "ipc", "tasks.create",
-                                     "calendarId=" + defaultCalendarId,
-                                     "summary=" + parsed.summary]
+            const args = ["dcal", "ipc", "tasks.create",
+                          "calendarId=" + defaultCalendarId,
+                          "summary=" + parsed.summary]
+            // allDay only travels with a due — dcal has nothing to apply it to
+            // otherwise, and an undated task is neither all-day nor timed.
+            if (parsed.due.length > 0) {
+                args.push("due=" + parsed.due)
+                args.push("allDay=" + (parsed.allDay ? "true" : "false"))
+            }
+            mutateProcess.command = args
             mutateProcess.running = true
         } else if (parsed.type === "toggle") {
             mutateProcess.actionType = "toggle"

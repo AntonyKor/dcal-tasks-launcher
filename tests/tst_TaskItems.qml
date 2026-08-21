@@ -105,7 +105,21 @@ TestCase {
     // Built from a local Date so the expectation holds in any zone.
     function test_dueLabel_timedUsesLocalCalendarDate() {
         var local = new Date(2026, 1, 21, 15, 30, 0)
-        compare(TaskItems.dueLabel(local.toISOString(), false), "Feb 21")
+        compare(TaskItems.dueLabel(local.toISOString(), false), "Feb 21, 3:30 PM")
+    }
+
+    function test_dueLabel_timedShowsMorningAndNoonBoundaries() {
+        compare(TaskItems.dueLabel(new Date(2026, 1, 21, 0, 5, 0).toISOString(), false),
+                "Feb 21, 12:05 AM")
+        compare(TaskItems.dueLabel(new Date(2026, 1, 21, 12, 0, 0).toISOString(), false),
+                "Feb 21, 12:00 PM")
+        compare(TaskItems.dueLabel(new Date(2026, 1, 21, 9, 0, 0).toISOString(), false),
+                "Feb 21, 9:00 AM")
+    }
+
+    // An all-day due has no time to show, and midnight UTC is not one.
+    function test_dueLabel_allDayStaysDateOnly() {
+        compare(TaskItems.dueLabel("2026-02-21T00:00:00Z", true), "Feb 21")
     }
 
     function test_dueLabel_emptyWhenNoDueDate() {
@@ -418,7 +432,7 @@ TestCase {
         compare(items[0].name, "Create task: buy milk")
         compare(items[0].comment, "in Chores")
         compare(items[0].icon, "material:add_task")
-        compare(items[0].action, "create:buy milk")
+        compare(TaskItems.parseAction(items[0].action).summary, "buy milk")
         compare(items[0]._preScored, 100000)
     }
 
@@ -478,7 +492,7 @@ TestCase {
             ]
         }), "match")
         compare(items.length, 3)
-        compare(items[0].action, "create:match")
+        compare(TaskItems.parseAction(items[0].action).summary, "match")
         compare(items[1].name, "match open")
         compare(items[2].name, "match done")
     }
@@ -514,7 +528,7 @@ TestCase {
             ]
         }), "zzz")
         compare(items.length, 1)
-        compare(items[0].action, "create:zzz")
+        compare(TaskItems.parseAction(items[0].action).summary, "zzz")
     }
 
     function test_buildItems_daemonDownShowsSingleErrorItem() {
@@ -599,7 +613,7 @@ TestCase {
         var items = TaskItems.buildItems(readyState({
             calendarsLoaded: false, calendars: {}, defaultCalendarId: "cal-chores"
         }), "buy milk")
-        compare(items[0].action, "create:buy milk")
+        compare(TaskItems.parseAction(items[0].action).summary, "buy milk")
         compare(items[0].name, "Create task: buy milk")
         compare(items[0].comment, "in the default task list")
     }
@@ -625,7 +639,7 @@ TestCase {
     function test_buildItems_noEmptyStateItemWhenQueryPresent() {
         var items = TaskItems.buildItems(readyState({tasks: []}), "zzz")
         compare(items.length, 1)
-        compare(items[0].action, "create:zzz")
+        compare(TaskItems.parseAction(items[0].action).summary, "zzz")
     }
 
     readonly property var viewTasks: [
@@ -890,5 +904,102 @@ TestCase {
         var f = TaskItems.mutationFailure("toggle", "Error: ipc error: task has no calendar")
         compare(f.message, "Could not update the task")
         compare(f.details, "task has no calendar")
+    }
+
+    // Fri 21 Aug 2026, 10:00 local.
+    readonly property double friMorning: new Date(2026, 7, 21, 10, 0, 0).getTime()
+
+    function test_createAction_carriesDueAndAllDay() {
+        var p = TaskItems.parseAction(
+            TaskItems.createAction("gym", "2026-08-30T00:00:00Z", true))
+        compare(p.type, "create")
+        compare(p.summary, "gym")
+        compare(p.due, "2026-08-30T00:00:00Z")
+        compare(p.allDay, true)
+    }
+
+    function test_createAction_withoutADueIsUndated() {
+        var p = TaskItems.parseAction(TaskItems.createAction("gym"))
+        compare(p.type, "create")
+        compare(p.summary, "gym")
+        compare(p.due, "")
+        compare(p.allDay, false)
+    }
+
+    function test_createAction_stillPreservesColonsAlongsideADue() {
+        var p = TaskItems.parseAction(
+            TaskItems.createAction("standup: prep notes: 10am", "2026-08-30T00:00:00Z", true))
+        compare(p.summary, "standup: prep notes: 10am")
+        compare(p.due, "2026-08-30T00:00:00Z")
+    }
+
+    function test_buildItems_datedQueryOffersDatedRowFirst() {
+        var items = TaskItems.buildItems(readyState({nowMs: friMorning}),
+                                         "publish tasks plugin tomorrow at 6PM")
+        compare(items[0].name, "Create task: publish tasks plugin")
+        compare(items[0].comment, "in Chores · due Aug 22, 6:00 PM")
+        compare(items[0]._preScored, 100000)
+
+        var p = TaskItems.parseAction(items[0].action)
+        compare(p.summary, "publish tasks plugin")
+        compare(p.allDay, false)
+        var due = new Date(p.due)
+        compare(due.getDate(), 22)
+        compare(due.getHours(), 18)
+    }
+
+    // The escape hatch: the literal text is always one row down.
+    function test_buildItems_datedQueryAlsoOffersTheLiteralText() {
+        var items = TaskItems.buildItems(readyState({nowMs: friMorning}),
+                                         "publish tasks plugin tomorrow at 6PM")
+        compare(items[1].name, "Create task: publish tasks plugin tomorrow at 6PM")
+        compare(items[1].comment, "in Chores · no due date")
+        compare(items[1]._preScored, 99999)
+
+        var p = TaskItems.parseAction(items[1].action)
+        compare(p.summary, "publish tasks plugin tomorrow at 6PM")
+        compare(p.due, "")
+    }
+
+    function test_buildItems_allDayQueryShowsDateWithoutATime() {
+        var items = TaskItems.buildItems(readyState({nowMs: friMorning}),
+                                         "renew passport aug 30")
+        compare(items[0].name, "Create task: renew passport")
+        compare(items[0].comment, "in Chores · due Aug 30")
+    }
+
+    function test_buildItems_undatedQueryOffersOneCreateRow() {
+        var items = TaskItems.buildItems(readyState({nowMs: friMorning}), "buy milk")
+        compare(items[0].name, "Create task: buy milk")
+        compare(items[0].comment, "in Chores")
+        compare(items.length, 1)
+    }
+
+    // A query that is nothing but a date has no title to create, so the
+    // dated row would be blank. Only the literal row is worth offering.
+    function test_buildItems_dateOnlyQueryOffersOnlyTheLiteralRow() {
+        var items = TaskItems.buildItems(readyState({nowMs: friMorning}), "tomorrow")
+        compare(items[0].name, "Create task: tomorrow")
+        compare(items[0].comment, "in Chores")
+        compare(items[0]._preScored, 100000)
+    }
+
+    // Without a default list neither row can create anything, so the prompt
+    // to configure one stays a single row.
+    function test_buildItems_datedQueryWithoutADefaultListStaysASinglePrompt() {
+        var items = TaskItems.buildItems(
+            readyState({nowMs: friMorning, defaultCalendarId: ""}), "gym tomorrow")
+        compare(items[0].name, "Set a default task list in plugin settings")
+        compare(items[0].action, "noop")
+        compare(items.length, 1)
+    }
+
+    function test_buildItems_timedTaskRowShowsTheTime() {
+        var local = new Date(2026, 1, 21, 18, 0, 0)
+        var items = TaskItems.buildItems(readyState({
+            tasks: [makeTask({id: "a", summary: "Alpha", allDay: false,
+                              due: local.toISOString()})]
+        }), "")
+        compare(items[0].comment, "Chores · due Feb 21, 6:00 PM")
     }
 }
