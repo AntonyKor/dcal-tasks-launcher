@@ -378,7 +378,7 @@ function _createItems(state, query) {
     }
 
     var where = cal ? "in " + cal.name : "in the default task list"
-    var dated = DateParser.parseTrailingDate(query, state.nowMs)
+    var dated = DateParser.parseTrailingDate(query, state.nowMs, state.dayFirst)
 
     // A query that is nothing but a date leaves no title behind, so there is
     // no dated row to offer — only the literal text.

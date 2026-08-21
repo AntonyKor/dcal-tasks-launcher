@@ -70,6 +70,17 @@ Item {
     readonly property bool use24Hour: typeof SettingsData !== "undefined"
                                       ? SettingsData.use24HourClock : true
 
+    // Which number is the day in "2/9". DMS has no setting for this — unlike
+    // the clock format — so it comes from the locale's own short date format,
+    // read the way DMS reads the locale for its 12/24-hour default. Quoted
+    // literals are stripped first so a format like 'de' d/M cannot mislead it.
+    readonly property bool dayFirst: {
+        const fmt = Qt.locale().dateFormat(Locale.ShortFormat).replace(/'[^']*'/g, "")
+        const day = fmt.indexOf("d")
+        const month = fmt.indexOf("M")
+        return day !== -1 && (month === -1 || day < month)
+    }
+
     // The DMS launcher calls this synchronously on every keystroke, so it must
     // never block. Return whatever is cached and let the refresh land later.
     function getItems(query) {
@@ -85,6 +96,7 @@ Item {
             showCompleted: root.showCompleted,
             defaultView: root.defaultView,
             use24Hour: root.use24Hour,
+            dayFirst: root.dayFirst,
             nowMs: Date.now()
         }, query || "")
     }
