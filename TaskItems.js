@@ -1,4 +1,5 @@
 .pragma library
+.import "DateParser.js" as DateParser
 
 // Pure helpers behind the dcalTasks launcher plugin. No QML imports, no
 // singletons, no Qt globals — everything here is unit tested by
@@ -57,16 +58,36 @@ var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
 // dcal writes all-day values as UTC midnight ("2026-02-21T00:00:00Z"), so an
 // all-day date must be read with the UTC getters or it renders as the previous
 // day west of UTC. Timed values are genuine instants and render in local time.
-function dueLabel(due, allDay) {
+// use24Hour comes from DMS's SettingsData.use24HourClock, passed in rather
+// than read here so this file keeps its no-Qt, no-singleton guarantee.
+function dueLabel(due, allDay, use24Hour) {
     if (!due)
         return ""
     var d = new Date(due)
     if (isNaN(d.getTime()))
         return ""
 
-    var month = allDay ? d.getUTCMonth() : d.getMonth()
-    var day = allDay ? d.getUTCDate() : d.getDate()
-    return MONTHS[month] + " " + day
+    // An all-day due has no time of day — its UTC midnight is a storage
+    // convention, not an hour the user picked — so it stays date-only.
+    if (allDay)
+        return MONTHS[d.getUTCMonth()] + " " + d.getUTCDate()
+
+    return MONTHS[d.getMonth()] + " " + d.getDate() + ", " + _timeLabel(d, use24Hour)
+}
+
+// Mirrors what DMS itself renders: "HH:mm" or "h:mm AP".
+function _timeLabel(d, use24Hour) {
+    var hour = d.getHours()
+    var minute = d.getMinutes()
+    var mm = (minute < 10 ? "0" : "") + minute
+
+    if (use24Hour)
+        return (hour < 10 ? "0" : "") + hour + ":" + mm
+
+    var hour12 = hour % 12
+    if (hour12 === 0)
+        hour12 = 12
+    return hour12 + ":" + mm + (hour < 12 ? " AM" : " PM")
 }
 
 // A calendar hidden in dcal, or excluded from sync (which purges its local
@@ -144,7 +165,7 @@ function _isDueByEndOfToday(due, allDay, nowMs) {
     return d.getTime() < endOfToday.getTime()
 }
 
-function selectTasks(tasks, calendars, query, showCompleted, view) {
+function selectTasks(tasks, calendars, query, showCompleted, view, use24Hour) {
     var open = []
     var done = []
     var needle = (query || "").toLowerCase()
@@ -175,7 +196,7 @@ function selectTasks(tasks, calendars, query, showCompleted, view) {
         var entry = {
             task: task,
             listName: listName,
-            due: dueLabel(task.due, task.allDay === true)
+            due: dueLabel(task.due, task.allDay === true, use24Hour)
         }
 
         if (task.status === "completed") {
@@ -219,8 +240,14 @@ function _timeOf(value) {
     return isNaN(t) ? Infinity : t
 }
 
-function createAction(summary) {
-    return "create:" + summary
+// JSON rather than a delimited string: the payload now carries a due date
+// alongside a summary that may itself contain any character.
+function createAction(summary, due, allDay) {
+    return "create:" + JSON.stringify({
+        summary: summary || "",
+        due: due || "",
+        allDay: allDay === true
+    })
 }
 
 function toggleAction(id, nextCompleted) {
@@ -238,9 +265,22 @@ function parseAction(action) {
     var kind = action.substring(0, sep)
     var payload = action.substring(sep + 1)
 
-    // A summary may contain ":", so everything after the first separator is text.
-    if (kind === "create")
-        return payload.length > 0 ? {type: "create", summary: payload} : {type: "noop"}
+    if (kind === "create") {
+        var fields = null
+        try {
+            fields = JSON.parse(payload)
+        } catch (e) {
+            return {type: "noop"}
+        }
+        if (!fields || !fields.summary)
+            return {type: "noop"}
+        return {
+            type: "create",
+            summary: fields.summary,
+            due: fields.due || "",
+            allDay: fields.allDay === true
+        }
+    }
 
     // A task id is a UUID, so the trailing boolean splits from the right.
     if (kind === "toggle") {
@@ -283,10 +323,14 @@ function buildItems(state, query) {
     // The default view narrows the list you get for free; typing means you are
     // looking for something, so a query searches everything.
     var view = q.length > 0 ? null : resolveView(state)
-    if (q.length > 0)
-        items.push(_createItem(state, q))
+    if (q.length > 0) {
+        var createRows = _createItems(state, q)
+        for (var c = 0; c < createRows.length; c++)
+            items.push(createRows[c])
+    }
 
-    var picked = selectTasks(state.tasks, state.calendars, q, state.showCompleted, view)
+    var picked = selectTasks(state.tasks, state.calendars, q, state.showCompleted, view,
+                             state.use24Hour)
 
     for (var i = 0; i < picked.open.length; i++)
         items.push(_taskItem(picked.open[i], false, SCORE_OPEN - i))
@@ -317,30 +361,48 @@ function _emptyItem(state, view) {
     return _noopItem("No tasks", "Type to create one")
 }
 
-function _createItem(state, query) {
+// One create row, or two when the query ends in something that reads as a
+// date: the dated one first, the literal text right under it. The second row
+// is the only escape hatch for a task genuinely titled "... tomorrow", and it
+// keeps a wrong guess one arrow key away from being harmless.
+function _createItems(state, query) {
     var cals = state.calendars || {}
     var cal = cals[state.defaultCalendarId]
 
     // While calendars are still loading an unknown id means "not fetched yet",
     // not "misconfigured", so stay optimistic and keep the item actionable.
     if (!cal && state.calendarsLoaded) {
-        return {
-            name: "Set a default task list in plugin settings",
-            icon: "material:add_task",
-            comment: "Plugin settings → Dcal Tasks → Default task list",
-            action: "noop",
-            categories: CATEGORIES,
-            _preScored: SCORE_CREATE
-        }
+        return [_createRow("Set a default task list in plugin settings",
+                           "Plugin settings → Dcal Tasks → Default task list",
+                           "noop", SCORE_CREATE)]
     }
 
+    var where = cal ? "in " + cal.name : "in the default task list"
+    var dated = DateParser.parseTrailingDate(query, state.nowMs)
+
+    // A query that is nothing but a date leaves no title behind, so there is
+    // no dated row to offer — only the literal text.
+    if (!dated || dated.summary.length === 0)
+        return [_createRow("Create task: " + query, where, createAction(query), SCORE_CREATE)]
+
+    return [
+        _createRow("Create task: " + dated.summary,
+                   where + " · due " + dueLabel(dated.due, dated.allDay, state.use24Hour),
+                   createAction(dated.summary, dated.due, dated.allDay),
+                   SCORE_CREATE),
+        _createRow("Create task: " + query, where + " · no due date",
+                   createAction(query), SCORE_CREATE - 1)
+    ]
+}
+
+function _createRow(name, comment, action, score) {
     return {
-        name: "Create task: " + query,
+        name: name,
         icon: "material:add_task",
-        comment: cal ? "in " + cal.name : "in the default task list",
-        action: createAction(query),
+        comment: comment,
+        action: action,
         categories: CATEGORIES,
-        _preScored: SCORE_CREATE
+        _preScored: score
     }
 }
 
