@@ -109,6 +109,24 @@ Under `TZ=UTC`, a version of `dueLabel` that reads all-day dates with local
 getters instead of UTC getters passes anyway, because UTC and local agree
 there.
 
+### Reloading during development
+
+`dms ipc call plugins reload dcalTasks` reloads the launcher component, but
+**not** the settings panel. DMS loads that through a `Loader` pointed at
+`DcalTasksSettings.qml`, and Qt caches QML components by URL for the life of
+the process, so edits to the settings panel — and a settings file that did not
+exist the first time the URL was resolved — are not picked up until the shell
+restarts:
+
+```bash
+systemctl --user restart dms
+```
+
+A settings panel that fails to load looks identical to one that has no
+settings at all: DMS's `settingsContainer` sets `clip: true` and collapses to
+zero height when the loader has no item, so the "Failed to load settings"
+message is clipped away. If the panel is blank, restart before debugging.
+
 ## License
 
 MIT
