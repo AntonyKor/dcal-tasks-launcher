@@ -130,3 +130,40 @@ function _timeOf(value) {
     var t = new Date(value).getTime()
     return isNaN(t) ? Infinity : t
 }
+
+function createAction(summary) {
+    return "create:" + summary
+}
+
+function toggleAction(id, nextCompleted) {
+    return "toggle:" + id + ":" + (nextCompleted ? "true" : "false")
+}
+
+function parseAction(action) {
+    if (!action || typeof action !== "string")
+        return {type: "noop"}
+
+    var sep = action.indexOf(":")
+    if (sep === -1)
+        return {type: "noop"}
+
+    var kind = action.substring(0, sep)
+    var payload = action.substring(sep + 1)
+
+    // A summary may contain ":", so everything after the first separator is text.
+    if (kind === "create")
+        return payload.length > 0 ? {type: "create", summary: payload} : {type: "noop"}
+
+    // A task id is a UUID, so the trailing boolean splits from the right.
+    if (kind === "toggle") {
+        var last = payload.lastIndexOf(":")
+        if (last === -1)
+            return {type: "noop"}
+        var id = payload.substring(0, last)
+        if (id.length === 0)
+            return {type: "noop"}
+        return {type: "toggle", id: id, completed: payload.substring(last + 1) === "true"}
+    }
+
+    return {type: "noop"}
+}

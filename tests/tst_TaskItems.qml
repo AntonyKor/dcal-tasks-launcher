@@ -233,4 +233,44 @@ TestCase {
         compare(r.open.length, 1)
         compare(r.open[0].listName, "")
     }
+
+    function test_createAction_roundTrips() {
+        var a = TaskItems.createAction("buy milk")
+        var p = TaskItems.parseAction(a)
+        compare(p.type, "create")
+        compare(p.summary, "buy milk")
+    }
+
+    function test_createAction_preservesColonsInSummary() {
+        var a = TaskItems.createAction("standup: prep notes: 10am")
+        var p = TaskItems.parseAction(a)
+        compare(p.type, "create")
+        compare(p.summary, "standup: prep notes: 10am")
+    }
+
+    function test_toggleAction_roundTripsTrue() {
+        var a = TaskItems.toggleAction("aad244a3-93dd-411c-a020-9c37cdfb799b", true)
+        var p = TaskItems.parseAction(a)
+        compare(p.type, "toggle")
+        compare(p.id, "aad244a3-93dd-411c-a020-9c37cdfb799b")
+        compare(p.completed, true)
+    }
+
+    function test_toggleAction_roundTripsFalse() {
+        var p = TaskItems.parseAction(TaskItems.toggleAction("t-1", false))
+        compare(p.type, "toggle")
+        compare(p.id, "t-1")
+        compare(p.completed, false)
+    }
+
+    function test_parseAction_noopForUnknownOrEmpty() {
+        compare(TaskItems.parseAction("noop").type, "noop")
+        compare(TaskItems.parseAction("").type, "noop")
+        compare(TaskItems.parseAction(undefined).type, "noop")
+        compare(TaskItems.parseAction("whatever:1").type, "noop")
+    }
+
+    function test_parseAction_createWithEmptySummaryIsNoop() {
+        compare(TaskItems.parseAction("create:").type, "noop")
+    }
 }
