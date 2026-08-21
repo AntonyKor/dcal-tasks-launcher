@@ -273,4 +273,123 @@ TestCase {
     function test_parseAction_createWithEmptySummaryIsNoop() {
         compare(TaskItems.parseAction("create:").type, "noop")
     }
+
+    function readyState(over) {
+        var base = {
+            tasksLoaded: true,
+            calendarsLoaded: true,
+            error: "",
+            tasks: [],
+            calendars: cals,
+            defaultCalendarId: "cal-chores",
+            showCompleted: false
+        }
+        for (var k in over)
+            base[k] = over[k]
+        return base
+    }
+
+    function test_buildItems_createItemIsFirstAndLabelledWithQuery() {
+        var items = TaskItems.buildItems(readyState({}), "buy milk")
+        compare(items[0].name, "Create task: buy milk")
+        compare(items[0].comment, "in Chores")
+        compare(items[0].icon, "material:add_task")
+        compare(items[0].action, "create:buy milk")
+        compare(items[0]._preScored, 100000)
+    }
+
+    function test_buildItems_noCreateItemWithoutQuery() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: [makeTask({id: "a", summary: "Alpha"})]}), "")
+        compare(items.length, 1)
+        compare(items[0].name, "Alpha")
+    }
+
+    function test_buildItems_openTaskItemShape() {
+        var items = TaskItems.buildItems(readyState({
+            tasks: [makeTask({id: "a", summary: "Alpha", allDay: true,
+                              due: "2026-02-21T00:00:00Z"})]
+        }), "")
+        compare(items[0].name, "Alpha")
+        compare(items[0].icon, "material:radio_button_unchecked")
+        compare(items[0].comment, "Chores · due Feb 21")
+        compare(items[0].action, "toggle:a:true")
+        compare(items[0]._preScored, 90000)
+        compare(items[0].categories.length, 1)
+        compare(items[0].categories[0], "Tasks")
+    }
+
+    function test_buildItems_openTaskWithoutDueOmitsDueSuffix() {
+        var items = TaskItems.buildItems(
+            readyState({tasks: [makeTask({id: "a", summary: "Alpha"})]}), "")
+        compare(items[0].comment, "Chores")
+    }
+
+    function test_buildItems_unknownCalendarLeavesCommentEmpty() {
+        var items = TaskItems.buildItems(readyState({
+            tasks: [makeTask({id: "a", summary: "Alpha", calendarId: "gone"})]
+        }), "")
+        compare(items[0].comment, "")
+    }
+
+    function test_buildItems_completedTaskItemShape() {
+        var items = TaskItems.buildItems(readyState({
+            showCompleted: true,
+            tasks: [makeTask({id: "b", summary: "Bravo", status: "completed",
+                              completed: "2026-08-21T10:00:00Z"})]
+        }), "")
+        compare(items[0].name, "Bravo")
+        compare(items[0].icon, "material:check_circle")
+        compare(items[0].action, "toggle:b:false")
+        compare(items[0]._preScored, 80000)
+    }
+
+    function test_buildItems_orderIsCreateThenOpenThenCompleted() {
+        var items = TaskItems.buildItems(readyState({
+            showCompleted: true,
+            tasks: [
+                makeTask({id: "b", summary: "match done", status: "completed",
+                          completed: "2026-08-21T10:00:00Z"}),
+                makeTask({id: "a", summary: "match open"})
+            ]
+        }), "match")
+        compare(items.length, 3)
+        compare(items[0].action, "create:match")
+        compare(items[1].name, "match open")
+        compare(items[2].name, "match done")
+    }
+
+    function test_buildItems_preScoredStrictlyDescending() {
+        var items = TaskItems.buildItems(readyState({
+            showCompleted: true,
+            tasks: [
+                makeTask({id: "a", summary: "Alpha"}),
+                makeTask({id: "c", summary: "Charlie"}),
+                makeTask({id: "b", summary: "Bravo", status: "completed",
+                          completed: "2026-08-21T10:00:00Z"})
+            ]
+        }), "a")
+        verify(items.length > 1)
+        for (var i = 1; i < items.length; i++)
+            verify(items[i]._preScored < items[i - 1]._preScored)
+    }
+
+    function test_buildItems_allItemsAreScoredAbove900() {
+        var items = TaskItems.buildItems(readyState({
+            tasks: [makeTask({id: "a", summary: "Alpha"})]
+        }), "")
+        for (var i = 0; i < items.length; i++)
+            verify(items[i]._preScored > 900)
+    }
+
+    function test_buildItems_queryFiltersTasksButKeepsCreateItem() {
+        var items = TaskItems.buildItems(readyState({
+            tasks: [
+                makeTask({id: "a", summary: "Find therapist"}),
+                makeTask({id: "b", summary: "Buy milk"})
+            ]
+        }), "zzz")
+        compare(items.length, 1)
+        compare(items[0].action, "create:zzz")
+    }
 }

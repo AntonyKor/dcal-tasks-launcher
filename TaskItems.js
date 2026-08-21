@@ -167,3 +167,54 @@ function parseAction(action) {
 
     return {type: "noop"}
 }
+
+var CATEGORIES = ["Tasks"]
+
+var SCORE_CREATE = 100000
+var SCORE_OPEN = 90000
+var SCORE_DONE = 80000
+
+function buildItems(state, query) {
+    var q = query || ""
+    var items = []
+
+    if (q.length > 0)
+        items.push(_createItem(state, q))
+
+    var picked = selectTasks(state.tasks, state.calendars, q, state.showCompleted)
+
+    for (var i = 0; i < picked.open.length; i++)
+        items.push(_taskItem(picked.open[i], false, SCORE_OPEN - i))
+
+    for (var j = 0; j < picked.done.length; j++)
+        items.push(_taskItem(picked.done[j], true, SCORE_DONE - j))
+
+    return items
+}
+
+function _createItem(state, query) {
+    var cal = state.calendars ? state.calendars[state.defaultCalendarId] : null
+    return {
+        name: "Create task: " + query,
+        icon: "material:add_task",
+        comment: "in " + cal.name,
+        action: createAction(query),
+        categories: CATEGORIES,
+        _preScored: SCORE_CREATE
+    }
+}
+
+function _taskItem(entry, isDone, score) {
+    var comment = entry.listName
+    if (entry.due.length > 0)
+        comment = comment.length > 0 ? comment + " · due " + entry.due : "due " + entry.due
+
+    return {
+        name: entry.task.summary || "",
+        icon: isDone ? "material:check_circle" : "material:radio_button_unchecked",
+        comment: comment,
+        action: toggleAction(entry.task.id, !isDone),
+        categories: CATEGORIES,
+        _preScored: score
+    }
+}
