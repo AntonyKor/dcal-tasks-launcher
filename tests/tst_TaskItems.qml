@@ -58,10 +58,20 @@ TestCase {
         compare(r.tasks.length, 0)
     }
 
+    function test_parseTasks_malformedJsonHasParseKind() {
+        var r = TaskItems.parseTasks('dcal daemon not running')
+        compare(r.kind, "parse")
+    }
+
     function test_parseTasks_emptyStringFails() {
         var r = TaskItems.parseTasks('')
         verify(!r.ok)
         compare(r.tasks.length, 0)
+    }
+
+    function test_parseTasks_emptyStringHasEmptyKind() {
+        var r = TaskItems.parseTasks('')
+        compare(r.kind, "empty")
     }
 
     function test_parseCalendars_indexesById() {
@@ -404,6 +414,27 @@ TestCase {
         compare(items[0].action, "noop")
         compare(items[0].categories[0], "Tasks")
         verify(items[0]._preScored > 900)
+    }
+
+    function test_buildItems_parseErrorShowsCouldNotReadTasksMessage() {
+        var items = TaskItems.buildItems(readyState({
+            tasksLoaded: false, calendarsLoaded: false,
+            error: "Unexpected token d in JSON at position 0", errorKind: "parse"
+        }), "")
+        compare(items.length, 1)
+        compare(items[0].name, "Could not read tasks from dcal")
+        compare(items[0].comment, "Unexpected token d in JSON at position 0")
+        compare(items[0].action, "noop")
+        compare(items[0].categories[0], "Tasks")
+        verify(items[0]._preScored > 900)
+    }
+
+    function test_buildItems_parseErrorDistinctFromDaemonDown() {
+        var items = TaskItems.buildItems(readyState({
+            tasksLoaded: false, calendarsLoaded: false,
+            error: "boom", errorKind: "parse"
+        }), "")
+        verify(items[0].name !== "dcal is not running")
     }
 
     function test_buildItems_errorItemWinsEvenWithAQuery() {

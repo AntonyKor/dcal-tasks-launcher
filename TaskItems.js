@@ -7,16 +7,16 @@
 function parseTasks(text) {
     var parsed = _parseJson(text)
     if (!parsed.ok)
-        return {ok: false, tasks: [], error: parsed.error}
+        return {ok: false, tasks: [], error: parsed.error, kind: parsed.kind}
 
     var tasks = parsed.value && parsed.value.tasks
-    return {ok: true, tasks: Array.isArray(tasks) ? tasks : [], error: ""}
+    return {ok: true, tasks: Array.isArray(tasks) ? tasks : [], error: "", kind: ""}
 }
 
 function parseCalendars(text) {
     var parsed = _parseJson(text)
     if (!parsed.ok)
-        return {ok: false, calendars: {}, error: parsed.error}
+        return {ok: false, calendars: {}, error: parsed.error, kind: parsed.kind}
 
     var list = Array.isArray(parsed.value) ? parsed.value : []
     var byId = {}
@@ -32,16 +32,20 @@ function parseCalendars(text) {
             readOnly: c.readOnly === true
         }
     }
-    return {ok: true, calendars: byId, error: ""}
+    return {ok: true, calendars: byId, error: "", kind: ""}
 }
 
+// kind distinguishes two read failures that look identical downstream but
+// need different messages: "empty" is no output at all (dcal missing, or the
+// daemon down and writing only to stderr); "parse" is output that arrived but
+// isn't valid JSON (e.g. a stray non-JSON line ahead of the real payload).
 function _parseJson(text) {
     if (!text || text.trim().length === 0)
-        return {ok: false, value: null, error: "dcal returned no output"}
+        return {ok: false, value: null, error: "dcal returned no output", kind: "empty"}
     try {
-        return {ok: true, value: JSON.parse(text), error: ""}
+        return {ok: true, value: JSON.parse(text), error: "", kind: ""}
     } catch (e) {
-        return {ok: false, value: null, error: String(e.message || e)}
+        return {ok: false, value: null, error: String(e.message || e), kind: "parse"}
     }
 }
 
@@ -179,8 +183,14 @@ function buildItems(state, query) {
 
     // Only claim a failure when there is no cache to fall back on. A refresh
     // that fails while a good list is already loaded keeps showing that list.
-    if (!state.tasksLoaded && state.error && state.error.length > 0)
+    if (!state.tasksLoaded && state.error && state.error.length > 0) {
+        // "parse" means dcal answered but the output wasn't valid JSON — a
+        // different failure from "not running", and the parse error itself
+        // is the only diagnostic that explains it, so surface it verbatim.
+        if (state.errorKind === "parse")
+            return [_noopItem("Could not read tasks from dcal", state.error)]
         return [_noopItem("dcal is not running", "Start it with: dcal run -d")]
+    }
 
     if (!state.tasksLoaded)
         return [_noopItem("Loading tasks…", "")]
