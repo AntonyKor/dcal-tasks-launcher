@@ -258,13 +258,21 @@ TestCase {
         compare(r.open[0].listName, "")
     }
 
-    // Aug 21 12:00 UTC. "Today" is a local calendar date, so the expectations
-    // below hold for any run whose local date at this instant is Aug 21 —
-    // offsets from -12:00 to +11:59, which covers the documented test matrix
-    // (default, UTC, America/Los_Angeles). Far enough east, e.g.
-    // Pacific/Auckland at +12, the local date is already Aug 22 and the
-    // all-day boundary case legitimately flips.
-    readonly property double nowMs: Date.parse("2026-08-21T12:00:00Z")
+    // "Today" is a local calendar date, so the clock and every timed due below
+    // are built from a local Date — noon on 21 August wherever the suite runs.
+    // A UTC instant cannot stand in for them: 2026-08-21T12:00:00Z is already
+    // 22 August at UTC+14, which silently moves "today" under the assertions.
+    // All-day dues stay literal UTC midnights, because that is the wire format
+    // whose comparison against the local date is the thing under test.
+    readonly property double nowMs: localMs(2026, 7, 21, 12, 0)
+
+    function localMs(y, m, d, h, min) {
+        return new Date(y, m, d, h === undefined ? 0 : h, min === undefined ? 0 : min, 0).getTime()
+    }
+
+    function localIso(y, m, d, h, min) {
+        return new Date(localMs(y, m, d, h, min)).toISOString()
+    }
 
     function todayView() {
         return {mode: "today", defaultCalendarId: "", nowMs: nowMs}
@@ -272,25 +280,23 @@ TestCase {
 
     function test_selectTasks_todayViewKeepsOverdue() {
         var tasks = [makeTask({id: "a", summary: "Alpha",
-                               due: "2026-08-19T12:00:00Z"})]
+                               due: localIso(2026, 7, 19, 12, 0)})]
         var r = TaskItems.selectTasks(tasks, cals, "", false, todayView())
         compare(r.open.length, 1)
         compare(r.open[0].task.id, "a")
     }
 
-    // Half an hour after nowMs, which is still before local midnight at every
-    // offset the test suite runs at. A later-in-the-day instant is not safe:
-    // 23:00Z is already tomorrow east of UTC.
+    // Half an hour after nowMs and still the same local day, at any offset.
     function test_selectTasks_todayViewKeepsTimedDueLaterToday() {
         var tasks = [makeTask({id: "a", summary: "Alpha",
-                               due: "2026-08-21T12:30:00Z"})]
+                               due: localIso(2026, 7, 21, 12, 30)})]
         var r = TaskItems.selectTasks(tasks, cals, "", false, todayView())
         compare(r.open.length, 1)
     }
 
     function test_selectTasks_todayViewDropsFutureTask() {
         var tasks = [makeTask({id: "a", summary: "Alpha",
-                               due: "2026-08-23T12:00:00Z"})]
+                               due: localIso(2026, 7, 23, 12, 0)})]
         var r = TaskItems.selectTasks(tasks, cals, "", false, todayView())
         compare(r.open.length, 0)
     }
@@ -322,10 +328,10 @@ TestCase {
         var tasks = [
             makeTask({id: "a", summary: "Alpha", status: "completed",
                       completed: "2026-08-21T10:00:00Z",
-                      due: "2026-08-19T12:00:00Z"}),
+                      due: localIso(2026, 7, 19, 12, 0)}),
             makeTask({id: "b", summary: "Bravo", status: "completed",
                       completed: "2026-08-21T10:00:00Z",
-                      due: "2026-08-23T12:00:00Z"})
+                      due: localIso(2026, 7, 23, 12, 0)})
         ]
         var r = TaskItems.selectTasks(tasks, cals, "", true, todayView())
         compare(r.done.length, 1)

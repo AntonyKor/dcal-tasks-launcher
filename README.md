@@ -238,9 +238,15 @@ Under `TZ=UTC`, a version of `dueLabel` that reads all-day dates with local
 getters instead of UTC getters passes anyway, because UTC and local agree
 there.
 
-One test — `test_selectTasks_todayViewAllDayIsTimezoneIndependent` — fails at
-`TZ=Pacific/Kiritimati` (UTC+14). That predates the due-date parser and is a
-`defaultView: today` bug, not a formatting one.
+The suite is timezone-independent across the full range of real offsets, and
+is run against `Pacific/Kiritimati` (+14), `Pacific/Apia`, `Pacific/Auckland`,
+`Asia/Kolkata`, `Europe/Kyiv`, `America/Los_Angeles`, `Pacific/Midway` and
+`Etc/GMT+12` (-12). Any fixture standing in for "now" or for a timed due is
+built from a local `Date` rather than a UTC instant: `2026-08-21T12:00:00Z` is
+already 22 August at UTC+14, which silently moves "today" out from under a
+`defaultView: today` assertion. All-day dues stay literal UTC midnights,
+because that is the wire format whose comparison against the local calendar
+date is the thing being tested.
 
 ### Reloading during development
 
