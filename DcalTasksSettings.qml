@@ -10,12 +10,17 @@ PluginSettings {
 
     pluginId: "dcalTasks"
 
-    // Every state keeps exactly one option whose value is "", so the closed
-    // dropdown always has a label to show for the unset setting. Without it
-    // DankDropdown falls back to emptyText, which SelectionSetting leaves blank.
+    // Option 0 must never change its label. DankDropdown feeds its ListView
+    // through a ScriptModel, which reuses delegates by value; swapping index 0
+    // out from under a built delegate leaves the old text rendered behind the
+    // new one. So the prompt is the permanent first entry in every state, real
+    // lists are appended to it, and failures go to calendarStatus below the
+    // picker instead of into the option list. The prompt also gives the closed
+    // dropdown a label for the unset "" value, which it otherwise renders blank.
     readonly property var promptOption: ({label: "Select a task list", value: ""})
 
-    property var calendarOptions: [{label: "Loading task lists…", value: ""}]
+    property var calendarOptions: [root.promptOption]
+    property string calendarStatus: ""
 
     Component.onCompleted: calendarsProcess.running = true
 
@@ -33,7 +38,8 @@ PluginSettings {
             if (running) {
                 completed = false
             } else if (!completed) {
-                root.calendarOptions = [{label: "dcal could not be started", value: ""}]
+                root.calendarStatus = "dcal could not be started. Is it installed and on your PATH?"
+                root.calendarOptions = [root.promptOption]
             }
         }
 
@@ -42,14 +48,14 @@ PluginSettings {
                 calendarsProcess.completed = true
                 const result = TaskItems.parseCalendars(text)
                 if (!result.ok) {
-                    root.calendarOptions = [{label: "dcal is not running", value: ""}]
+                    root.calendarStatus = "dcal is not running. Start it with: dcal run -d"
+                    root.calendarOptions = [root.promptOption]
                     return
                 }
 
                 const options = TaskItems.taskListOptions(result.calendars)
-                root.calendarOptions = options.length > 0
-                    ? [root.promptOption].concat(options)
-                    : [{label: "No writable task lists found", value: ""}]
+                root.calendarStatus = options.length > 0 ? "" : "No writable task lists found in dcal."
+                root.calendarOptions = [root.promptOption].concat(options)
             }
         }
     }
@@ -76,6 +82,15 @@ PluginSettings {
         description: "New tasks are created in this list"
         defaultValue: ""
         options: root.calendarOptions
+    }
+
+    StyledText {
+        width: parent.width
+        text: root.calendarStatus
+        visible: root.calendarStatus !== ""
+        font.pixelSize: Theme.fontSizeSmall
+        color: Theme.error
+        wrapMode: Text.WordWrap
     }
 
     ToggleSetting {

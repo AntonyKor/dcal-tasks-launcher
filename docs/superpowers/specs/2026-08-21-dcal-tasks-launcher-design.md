@@ -37,7 +37,7 @@ and per-list filtering inside the launcher.
 | Transport | `dcal ipc <method> k=v` as a subprocess | Matches every existing DMS↔dcal plugin; no socket discovery or reconnect logic. |
 | Enter on a task | `tasks.complete` toggle | The one action worth a keystroke in a launcher. |
 | Completed tasks | Hidden, revealed by a settings toggle | Keeps the default list to what is still open. |
-| Task sources | All calendars with `holdsTasks: true` | The default list only decides where *new* tasks go. |
+| Task sources | Calendars with `holdsTasks: true` that are not `hidden` or `syncDisabled` | A list switched off in dcal is one the user has switched off; the default list only decides where *new* tasks go. |
 | Default trigger | `;` | Free on a stock DMS + common plugin set; single char, cannot collide with a word. |
 | Freshness | Refresh when stale on `getItems`, plus after mutations | A launcher plugin is only read when the launcher is open, so polling is waste. |
 
@@ -111,7 +111,7 @@ as argv arrays, never through a shell.
 
 Task fields consumed: `id`, `summary`, `status`, `calendarId`, `due`, `allDay`,
 `completed`. Calendar fields consumed: `id`, `name`, `accountName`,
-`holdsTasks`, `readOnly`.
+`holdsTasks`, `readOnly`, `hidden`, `syncDisabled`.
 
 `dcal ipc` writes pretty-printed JSON to stdout, exits non-zero on failure, and
 prints `dcal daemon not running: ...` to stderr when the daemon is down.
@@ -137,7 +137,7 @@ plugin reports the loading state rather than a wrong empty list.
 ### State
 
 - `tasks` — last successful `tasks.list` payload.
-- `calendars` — id → `{name, accountName, holdsTasks, readOnly}`.
+- `calendars` — id → `{name, accountName, holdsTasks, readOnly, hidden, syncDisabled}`.
 - `lastRefreshMs`, `loading`, `lastError`.
 - Settings mirrors: `trigger`, `defaultCalendarId`, `showCompleted`.
 
@@ -229,7 +229,11 @@ item is shown only when there is nothing cached to show.
 - `StringSetting` `trigger`, default `;`.
 - `SelectionSetting` `defaultCalendarId`. `options` is a plain `var` property,
   so it can be bound to a list populated asynchronously from `calendars.list`,
-  filtered to `holdsTasks && !readOnly`, each labelled `<accountName> — <name>`.
+  filtered to `holdsTasks && !readOnly && !hidden && !syncDisabled`. The label
+leads with the list name, appending ` — <accountName>` only to disambiguate
+lists that share a name: `DankDropdown` elides right at a fixed width, so a
+leading account name collapses every list on a multi-list account into the same
+truncated stub.
   Until the call returns the dropdown shows the stored raw value, which
   `SelectionSetting` already falls back to.
 - `ToggleSetting` `showCompleted`, default false.

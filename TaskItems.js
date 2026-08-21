@@ -29,7 +29,9 @@ function parseCalendars(text) {
             name: c.name || "",
             accountName: c.accountName || "",
             holdsTasks: c.holdsTasks === true,
-            readOnly: c.readOnly === true
+            readOnly: c.readOnly === true,
+            hidden: c.hidden === true,
+            syncDisabled: c.syncDisabled === true
         }
     }
     return {ok: true, calendars: byId, error: "", kind: ""}
@@ -67,6 +69,14 @@ function dueLabel(due, allDay) {
     return MONTHS[month] + " " + day
 }
 
+// A calendar hidden in dcal, or excluded from sync (which purges its local
+// copy), is one the user has switched off. Its tasks do not belong in the
+// launcher and it is not a valid creation target.
+function isUsableTaskList(cal) {
+    return !!cal && cal.holdsTasks === true && !cal.readOnly
+        && !cal.hidden && !cal.syncDisabled
+}
+
 function selectTasks(tasks, calendars, query, showCompleted) {
     var open = []
     var done = []
@@ -80,6 +90,10 @@ function selectTasks(tasks, calendars, query, showCompleted) {
             continue
 
         var cal = cals[task.calendarId]
+        // An unknown calendar means calendars.list has not landed yet, so the
+        // task is kept; only a calendar we can positively see is off is dropped.
+        if (cal && (cal.hidden || cal.syncDisabled))
+            continue
         var listName = cal ? cal.name : ""
         var summary = task.summary || ""
 
@@ -276,7 +290,7 @@ function taskListOptions(calendars) {
     var writable = []
     for (var id in cals) {
         var cal = cals[id]
-        if (!cal || !cal.holdsTasks || cal.readOnly)
+        if (!isUsableTaskList(cal))
             continue
         writable.push(cal)
     }

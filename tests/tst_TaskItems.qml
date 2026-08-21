@@ -582,4 +582,52 @@ TestCase {
         compare(o[0].label, "Inbox")
         compare(o[1].label, "Inbox")
     }
+
+    function test_parseCalendars_retainsHiddenAndSyncDisabled() {
+        var r = TaskItems.parseCalendars('[{"id":"h","name":"Hidden","accountName":"A",' +
+            '"holdsTasks":true,"readOnly":false,"hidden":true,"syncDisabled":true}]')
+        verify(r.ok)
+        compare(r.calendars["h"].hidden, true)
+        compare(r.calendars["h"].syncDisabled, true)
+    }
+
+    function test_parseCalendars_defaultsFlagsToFalseWhenAbsent() {
+        var r = TaskItems.parseCalendars('[{"id":"n","name":"Normal","holdsTasks":true}]')
+        compare(r.calendars["n"].hidden, false)
+        compare(r.calendars["n"].syncDisabled, false)
+    }
+
+    readonly property var mixedCals: ({
+        "ok": {id: "ok", name: "Chores", accountName: "R", holdsTasks: true,
+               readOnly: false, hidden: false, syncDisabled: false},
+        "hid": {id: "hid", name: "My Tasks", accountName: "R", holdsTasks: true,
+                readOnly: false, hidden: true, syncDisabled: true},
+        "nosync": {id: "nosync", name: "Archived", accountName: "R", holdsTasks: true,
+                   readOnly: false, hidden: false, syncDisabled: true}
+    })
+
+    function test_taskListOptions_excludesHiddenAndSyncDisabled() {
+        var o = TaskItems.taskListOptions(mixedCals)
+        compare(o.length, 1)
+        compare(o[0].label, "Chores")
+    }
+
+    function test_selectTasks_dropsTasksFromHiddenCalendars() {
+        var tasks = [
+            makeTask({id: "a", summary: "Visible", calendarId: "ok"}),
+            makeTask({id: "b", summary: "Hidden one", calendarId: "hid"}),
+            makeTask({id: "c", summary: "Unsynced", calendarId: "nosync"})
+        ]
+        var r = TaskItems.selectTasks(tasks, mixedCals, "", false)
+        compare(r.open.length, 1)
+        compare(r.open[0].task.id, "a")
+    }
+
+    // calendars.list is a second IPC call; until it lands every calendar is
+    // unknown, and dropping those tasks would blank the launcher on open.
+    function test_selectTasks_keepsTasksWhoseCalendarIsNotLoadedYet() {
+        var tasks = [makeTask({id: "a", summary: "Visible", calendarId: "ok"})]
+        var r = TaskItems.selectTasks(tasks, {}, "", false)
+        compare(r.open.length, 1)
+    }
 }
