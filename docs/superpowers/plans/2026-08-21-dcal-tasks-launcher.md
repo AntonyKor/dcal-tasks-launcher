@@ -1426,8 +1426,19 @@ If `qmllint6` is unavailable, skip this step; Step 4 catches the same failures.
 
 ```bash
 ln -sfn "$PWD" ~/.config/DankMaterialShell/plugins/dcalTasks
-dms ipc reload || qs -c dms kill
+dms ipc call plugin-scan rescan
+dms ipc call plugins enable dcalTasks
+dms ipc call plugins list | grep dcalTasks
 ```
+
+Expected: `dcalTasks [loaded]`. After any later edit to the QML, reload with
+`dms ipc call plugins reload dcalTasks`. The CLI shape is
+`dms ipc call <target> <function> [args]` — `dms ipc reload` is not valid.
+
+`plugin.json` names `./DcalTasksSettings.qml`, which Task 8 creates. That is
+fine: `PluginService._resolveComponentPaths` reads only `component`/`components`,
+never `settings`, so the plugin loads normally and only the settings page is
+unavailable until Task 8.
 
 Then open the launcher and type `;`. Verify each of these:
 
@@ -1557,7 +1568,7 @@ PluginSettings {
 - [ ] **Step 2: Reload and verify the picker populates**
 
 ```bash
-dms ipc reload || qs -c dms kill
+dms ipc call plugins reload dcalTasks
 ```
 
 Open DMS Settings → Plugins → Dcal Tasks. Verify:
