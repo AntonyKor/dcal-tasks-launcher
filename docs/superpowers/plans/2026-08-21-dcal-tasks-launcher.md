@@ -1426,7 +1426,7 @@ If `qmllint6` is unavailable, skip this step; Step 4 catches the same failures.
 
 ```bash
 ln -sfn "$PWD" ~/.config/DankMaterialShell/plugins/dcalTasks
-dms ipc call plugin-scan rescan
+dms ipc call plugin-scan rescan dcalTasks
 dms ipc call plugins enable dcalTasks
 dms ipc call plugins list | grep dcalTasks
 ```
