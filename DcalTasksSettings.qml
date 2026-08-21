@@ -19,8 +19,22 @@ PluginSettings {
         command: ["dcal", "ipc", "calendars.list"]
         running: false
 
+        // See DcalTasksLauncher.qml's tasksProcess.completed: Quickshell's
+        // Process fires neither exited nor StdioCollector.onStreamFinished
+        // when the binary itself cannot be started, only onRunningChanged.
+        property bool completed: false
+
+        onRunningChanged: {
+            if (running) {
+                completed = false
+            } else if (!completed) {
+                root.calendarOptions = [{label: "dcal could not be started", value: ""}]
+            }
+        }
+
         stdout: StdioCollector {
             onStreamFinished: {
+                calendarsProcess.completed = true
                 const result = TaskItems.parseCalendars(text)
                 if (!result.ok) {
                     root.calendarOptions = [{label: "dcal is not running", value: ""}]
