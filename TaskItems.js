@@ -176,8 +176,16 @@ var SCORE_DONE = 80000
 
 function buildItems(state, query) {
     var q = query || ""
-    var items = []
 
+    // Only claim a failure when there is no cache to fall back on. A refresh
+    // that fails while a good list is already loaded keeps showing that list.
+    if (!state.tasksLoaded && state.error && state.error.length > 0)
+        return [_noopItem("dcal is not running", "Start it with: dcal run -d")]
+
+    if (!state.tasksLoaded)
+        return [_noopItem("Loading tasks…", "")]
+
+    var items = []
     if (q.length > 0)
         items.push(_createItem(state, q))
 
@@ -189,16 +197,45 @@ function buildItems(state, query) {
     for (var j = 0; j < picked.done.length; j++)
         items.push(_taskItem(picked.done[j], true, SCORE_DONE - j))
 
+    if (items.length === 0)
+        items.push(_noopItem("No tasks", "Type to create one"))
+
     return items
 }
 
 function _createItem(state, query) {
-    var cal = state.calendars ? state.calendars[state.defaultCalendarId] : null
+    var cals = state.calendars || {}
+    var cal = cals[state.defaultCalendarId]
+
+    // While calendars are still loading an unknown id means "not fetched yet",
+    // not "misconfigured", so stay optimistic and keep the item actionable.
+    if (!cal && state.calendarsLoaded) {
+        return {
+            name: "Set a default task list in plugin settings",
+            icon: "material:add_task",
+            comment: "Plugin settings → Dcal Tasks → Default task list",
+            action: "noop",
+            categories: CATEGORIES,
+            _preScored: SCORE_CREATE
+        }
+    }
+
     return {
         name: "Create task: " + query,
         icon: "material:add_task",
-        comment: "in " + cal.name,
+        comment: cal ? "in " + cal.name : "in the default task list",
         action: createAction(query),
+        categories: CATEGORIES,
+        _preScored: SCORE_CREATE
+    }
+}
+
+function _noopItem(name, comment) {
+    return {
+        name: name,
+        icon: "material:task_alt",
+        comment: comment,
+        action: "noop",
         categories: CATEGORIES,
         _preScored: SCORE_CREATE
     }

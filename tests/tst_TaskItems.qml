@@ -392,4 +392,94 @@ TestCase {
         compare(items.length, 1)
         compare(items[0].action, "create:zzz")
     }
+
+    function test_buildItems_daemonDownShowsSingleErrorItem() {
+        var items = TaskItems.buildItems(readyState({
+            tasksLoaded: false, calendarsLoaded: false,
+            error: "dcal daemon not running"
+        }), "")
+        compare(items.length, 1)
+        compare(items[0].name, "dcal is not running")
+        compare(items[0].comment, "Start it with: dcal run -d")
+        compare(items[0].action, "noop")
+        compare(items[0].categories[0], "Tasks")
+        verify(items[0]._preScored > 900)
+    }
+
+    function test_buildItems_errorItemWinsEvenWithAQuery() {
+        var items = TaskItems.buildItems(readyState({
+            tasksLoaded: false, error: "boom"
+        }), "buy milk")
+        compare(items.length, 1)
+        compare(items[0].action, "noop")
+    }
+
+    function test_buildItems_coldCacheShowsLoading() {
+        var items = TaskItems.buildItems(readyState({
+            tasksLoaded: false, calendarsLoaded: false, error: ""
+        }), "")
+        compare(items.length, 1)
+        compare(items[0].name, "Loading tasks…")
+        compare(items[0].action, "noop")
+    }
+
+    function test_buildItems_staleCacheSurvivesAFailedRefresh() {
+        var items = TaskItems.buildItems(readyState({
+            error: "dcal daemon not running",
+            tasks: [makeTask({id: "a", summary: "Alpha"})]
+        }), "")
+        compare(items.length, 1)
+        compare(items[0].name, "Alpha")
+    }
+
+    function test_buildItems_noDefaultListReplacesCreateItem() {
+        var items = TaskItems.buildItems(
+            readyState({defaultCalendarId: ""}), "buy milk")
+        compare(items[0].name, "Set a default task list in plugin settings")
+        compare(items[0].comment, "Plugin settings → Dcal Tasks → Default task list")
+        compare(items[0].action, "noop")
+        compare(items[0]._preScored, 100000)
+    }
+
+    function test_buildItems_deletedDefaultListReplacesCreateItem() {
+        var items = TaskItems.buildItems(
+            readyState({defaultCalendarId: "cal-deleted"}), "buy milk")
+        compare(items[0].name, "Set a default task list in plugin settings")
+        compare(items[0].action, "noop")
+    }
+
+    // Calendars arrive on their own IPC call. Until it lands, an unknown id
+    // means "not loaded yet", not "misconfigured".
+    function test_buildItems_unloadedCalendarsKeepCreateItemOptimistic() {
+        var items = TaskItems.buildItems(readyState({
+            calendarsLoaded: false, calendars: {}, defaultCalendarId: "cal-chores"
+        }), "buy milk")
+        compare(items[0].action, "create:buy milk")
+        compare(items[0].name, "Create task: buy milk")
+        compare(items[0].comment, "in the default task list")
+    }
+
+    function test_buildItems_emptyListWithNoQuery() {
+        var items = TaskItems.buildItems(readyState({tasks: []}), "")
+        compare(items.length, 1)
+        compare(items[0].name, "No tasks")
+        compare(items[0].comment, "Type to create one")
+        compare(items[0].action, "noop")
+    }
+
+    function test_buildItems_allTasksHiddenByToggleStillShowsEmptyState() {
+        var items = TaskItems.buildItems(readyState({
+            showCompleted: false,
+            tasks: [makeTask({id: "b", summary: "Bravo", status: "completed",
+                              completed: "2026-08-21T10:00:00Z"})]
+        }), "")
+        compare(items.length, 1)
+        compare(items[0].name, "No tasks")
+    }
+
+    function test_buildItems_noEmptyStateItemWhenQueryPresent() {
+        var items = TaskItems.buildItems(readyState({tasks: []}), "zzz")
+        compare(items.length, 1)
+        compare(items[0].action, "create:zzz")
+    }
 }
