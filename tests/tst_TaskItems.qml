@@ -513,4 +513,73 @@ TestCase {
         compare(items.length, 1)
         compare(items[0].action, "create:zzz")
     }
+
+    readonly property var writableCals: ({
+        "c1": {id: "c1", name: "Chores", accountName: "Radicale (mac mini)",
+               holdsTasks: true, readOnly: false},
+        "c2": {id: "c2", name: "Fitness", accountName: "Radicale (mac mini)",
+               holdsTasks: true, readOnly: false},
+        "c3": {id: "c3", name: "Family", accountName: "iCloud",
+               holdsTasks: false, readOnly: false},
+        "c4": {id: "c4", name: "Holidays", accountName: "Google",
+               holdsTasks: true, readOnly: true}
+    })
+
+    function test_taskListOptions_onlyWritableTaskLists() {
+        var o = TaskItems.taskListOptions(writableCals)
+        compare(o.length, 2)
+        compare(o[0].value, "c1")
+        compare(o[1].value, "c2")
+    }
+
+    // DankDropdown elides right at a fixed width, so a shared account prefix
+    // would truncate every entry to the same stub. The list name leads.
+    function test_taskListOptions_labelIsBareNameWhenUnambiguous() {
+        var o = TaskItems.taskListOptions(writableCals)
+        compare(o[0].label, "Chores")
+        compare(o[1].label, "Fitness")
+    }
+
+    function test_taskListOptions_appendsAccountOnlyForDuplicateNames() {
+        var o = TaskItems.taskListOptions({
+            "a": {id: "a", name: "Inbox", accountName: "Radicale",
+                  holdsTasks: true, readOnly: false},
+            "b": {id: "b", name: "Inbox", accountName: "iCloud",
+                  holdsTasks: true, readOnly: false},
+            "c": {id: "c", name: "Chores", accountName: "Radicale",
+                  holdsTasks: true, readOnly: false}
+        })
+        compare(o.length, 3)
+        compare(o[0].label, "Chores")
+        compare(o[1].label, "Inbox — iCloud")
+        compare(o[2].label, "Inbox — Radicale")
+    }
+
+    function test_taskListOptions_sortsByLabel() {
+        var o = TaskItems.taskListOptions({
+            "z": {id: "z", name: "zebra", accountName: "A",
+                  holdsTasks: true, readOnly: false},
+            "a": {id: "a", name: "Apple", accountName: "A",
+                  holdsTasks: true, readOnly: false},
+            "m": {id: "m", name: "mango", accountName: "A",
+                  holdsTasks: true, readOnly: false}
+        })
+        compare(o[0].label, "Apple")
+        compare(o[1].label, "mango")
+        compare(o[2].label, "zebra")
+    }
+
+    function test_taskListOptions_emptyWhenNothingWritable() {
+        compare(TaskItems.taskListOptions({}).length, 0)
+        compare(TaskItems.taskListOptions(null).length, 0)
+    }
+
+    function test_taskListOptions_missingAccountNameFallsBackToBareName() {
+        var o = TaskItems.taskListOptions({
+            "a": {id: "a", name: "Inbox", accountName: "", holdsTasks: true, readOnly: false},
+            "b": {id: "b", name: "Inbox", accountName: "", holdsTasks: true, readOnly: false}
+        })
+        compare(o[0].label, "Inbox")
+        compare(o[1].label, "Inbox")
+    }
 }

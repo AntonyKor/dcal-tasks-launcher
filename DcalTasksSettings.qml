@@ -10,6 +10,11 @@ PluginSettings {
 
     pluginId: "dcalTasks"
 
+    // Every state keeps exactly one option whose value is "", so the closed
+    // dropdown always has a label to show for the unset setting. Without it
+    // DankDropdown falls back to emptyText, which SelectionSetting leaves blank.
+    readonly property var promptOption: ({label: "Select a task list", value: ""})
+
     property var calendarOptions: [{label: "Loading task lists…", value: ""}]
 
     Component.onCompleted: calendarsProcess.running = true
@@ -41,20 +46,9 @@ PluginSettings {
                     return
                 }
 
-                const options = []
-                for (const id in result.calendars) {
-                    const cal = result.calendars[id]
-                    if (!cal.holdsTasks || cal.readOnly)
-                        continue
-                    options.push({
-                        label: cal.accountName ? cal.accountName + " — " + cal.name : cal.name,
-                        value: cal.id
-                    })
-                }
-                options.sort((a, b) => a.label < b.label ? -1 : (a.label > b.label ? 1 : 0))
-
+                const options = TaskItems.taskListOptions(result.calendars)
                 root.calendarOptions = options.length > 0
-                    ? options
+                    ? [root.promptOption].concat(options)
                     : [{label: "No writable task lists found", value: ""}]
             }
         }

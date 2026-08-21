@@ -265,3 +265,45 @@ function _taskItem(entry, isDone, score) {
         _preScored: score
     }
 }
+
+// Builds the settings dropdown's option list. Only writable task lists are
+// offerable. The label leads with the list name because DankDropdown elides
+// right at a fixed width: leading with the account name makes every entry of a
+// multi-list account render as an identical truncated stub. The account is
+// appended only to disambiguate lists that share a name.
+function taskListOptions(calendars) {
+    var cals = calendars || {}
+    var writable = []
+    for (var id in cals) {
+        var cal = cals[id]
+        if (!cal || !cal.holdsTasks || cal.readOnly)
+            continue
+        writable.push(cal)
+    }
+
+    var nameCounts = {}
+    for (var i = 0; i < writable.length; i++) {
+        var n = writable[i].name || ""
+        nameCounts[n] = (nameCounts[n] || 0) + 1
+    }
+
+    var options = []
+    for (var j = 0; j < writable.length; j++) {
+        var c = writable[j]
+        var name = c.name || ""
+        var ambiguous = nameCounts[name] > 1 && c.accountName
+        options.push({
+            label: ambiguous ? name + " — " + c.accountName : name,
+            value: c.id
+        })
+    }
+
+    options.sort(function (a, b) {
+        var la = a.label.toLowerCase()
+        var lb = b.label.toLowerCase()
+        if (la < lb)
+            return -1
+        return la > lb ? 1 : 0
+    })
+    return options
+}
