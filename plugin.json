@@ -3,14 +3,22 @@
   "name": "Dcal Tasks",
   "description": "List, search, create, and complete dcal tasks from the launcher.",
   "version": "0.1.0",
-  "author": "Anton Kalodzich",
+  "author": "AntonyKor",
   "icon": "task_alt",
   "type": "launcher",
-  "capabilities": ["launcher"],
+  "capabilities": [
+    "launcher"
+  ],
   "component": "./DcalTasksLauncher.qml",
   "settings": "./DcalTasksSettings.qml",
   "trigger": ";",
   "requires_dms": ">=1.5.0",
-  "requires": ["dcal"],
-  "permissions": ["settings_read", "settings_write", "process"]
+  "dependencies": [
+    "dcal"
+  ],
+  "permissions": [
+    "settings_read",
+    "settings_write",
+    "process"
+  ]
 }

@@ -5,6 +5,8 @@ plugin for [dcal](https://github.com/AvengeMedia/dankcalendar) tasks. It lists,
 searches, creates, and completes tasks from any dcal calendar directly in the
 DMS launcher.
 
+![Creating a task with a natural language due date](docs/screenshot.png)
+
 ## Requirements
 
 - DankMaterialShell >= 1.5.0
@@ -64,6 +66,8 @@ which one is set as default.
   the default task list.
 - End the text with a date phrase — `; publish tasks plugin tomorrow at 6PM` —
   to give the new task a due date. See **Due dates when creating** below.
+
+![Searching tasks from the launcher](docs/search.png)
 
 ## Due dates when creating
 
@@ -184,6 +188,8 @@ launcher permanently empty with no explanation.
 A failed create or complete raises an error toast naming the reason dcal
 gave. The launcher closes as soon as you press Enter, so the toast is the
 only place that failure can surface.
+
+![Plugin settings in DMS](docs/settings.png)
 
 ## Not supported yet
 
