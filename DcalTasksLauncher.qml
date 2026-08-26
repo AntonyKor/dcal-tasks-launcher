@@ -105,11 +105,14 @@ Item {
         const parsed = TaskItems.parseAction(item ? item.action : "")
 
         if (parsed.type === "create") {
-            if (!defaultCalendarId)
+            // A "/List" token in the query names its own target; without one
+            // the row creates in the configured default list.
+            const calendarId = parsed.calendarId || defaultCalendarId
+            if (!calendarId)
                 return
             mutateProcess.actionType = "create"
             const args = ["dcal", "ipc", "tasks.create",
-                          "calendarId=" + defaultCalendarId,
+                          "calendarId=" + calendarId,
                           "summary=" + parsed.summary]
             // allDay only travels with a due — dcal has nothing to apply it to
             // otherwise, and an undated task is neither all-day nor timed.

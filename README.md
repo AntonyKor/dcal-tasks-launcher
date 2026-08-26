@@ -66,8 +66,72 @@ which one is set as default.
   the default task list.
 - End the text with a date phrase — `; publish tasks plugin tomorrow at 6PM` —
   to give the new task a due date. See **Due dates when creating** below.
+- Add `/<list>` anywhere — `; buy milk /personal` — to create in that list
+  instead of the default one, or to narrow the search to it. See **Choosing
+  the task list** below.
 
 ![Searching tasks from the launcher](docs/search.png)
+
+## Choosing the task list
+
+A `/<list>` word picks which task list the new task goes in:
+
+```
+; buy milk /personal
+    → "buy milk"   in Personal
+```
+
+The word may sit anywhere in what you type — `; /personal buy milk` and
+`; buy milk /personal` are the same thing — because the *end* of the query
+already belongs to the due date (below).
+
+Matching is case-insensitive and forgiving, so you rarely type a whole name:
+
+| You type | It finds |
+|---|---|
+| `/personal` | Personal |
+| `/pers` | Personal — any prefix of the name |
+| `/guitar` | Guitar Learning — any word of the name |
+| `/adhd` | Understand ADHD — including a later word |
+| `/guitarlearn` | Guitar Learning — spaces squashed out |
+
+Only lists you could file a task in are offered: a list that holds no tasks,
+is read-only, or is hidden or excluded from sync in dcal never answers to a
+token.
+
+When several lists answer to the same word you get a row for each, best match
+first, so `/inbox` with both an `Inbox` and a `0. Inbox` offers both and picks
+nothing for you:
+
+```
++ Create task: buy milk
+    in Inbox
++ Create task: buy milk
+    in 0. Inbox
++ Create task: buy milk /inbox
+    in 0. Inbox
+```
+
+That last row is the same escape hatch the due date gets — the literal text,
+in the default list. A word that names no list is left alone entirely, so
+`; fix /etc/hosts` is a task called exactly that.
+
+Ranking is exact name, then prefix of the name, then prefix of a later word,
+shortest name first within each; at most five lists are offered, so a single
+letter narrows rather than floods.
+
+A `/<list>` on its own narrows the launcher to that list instead:
+
+```
+; /personal          → every open task in Personal
+; milk /personal     → tasks in Personal matching "milk", and the create rows
+```
+
+There is nothing to create from a bare `; /personal`, so it offers no create
+row; type a task name alongside it and the rows appear.
+
+A `/<list>` also works when no default task list is configured — it says where
+the task goes, which is all a create needs.
 
 ## Due dates when creating
 
@@ -169,7 +233,7 @@ follow.
 | Key | Default | Effect |
 |---|---|---|
 | `trigger` | `;` | Prefix that opens this launcher in DMS. Reload the plugin after changing it. |
-| `defaultCalendarId` | `""` | dcal calendar ID that new tasks are created in. Empty disables task creation. |
+| `defaultCalendarId` | `""` | dcal calendar ID that new tasks are created in. Empty disables task creation, except for a query that names a list itself with `/<list>`. |
 | `defaultView` | `all` | Which tasks the launcher lists before you type. `all` shows everything, `today` shows tasks due today or already overdue, `defaultList` shows only the default task list. Typing a query always searches everything. |
 | `showCompleted` | `false` | When true, completed tasks are listed below the open ones, most recently completed first. |
 
@@ -205,7 +269,10 @@ building launcher rows, encoding/decoding the action strings used by
 covered by `tests/tst_TaskItems.qml`. Reading a due date out of typed text
 lives in `DateParser.js`, is likewise pure, takes its clock as an argument
 (`nowMs`) so every case is deterministic, and is covered by
-`tests/tst_DateParser.qml`. `SettingsData.use24HourClock` reaches
+`tests/tst_DateParser.qml`. Reading a `/<list>` token out of that same text
+lives in `ListToken.js` and is covered by `tests/tst_ListToken.qml`; it runs
+before the date parser, because the date parser only ever reads the *end* of
+the query and the token has to be readable on either side of it. `SettingsData.use24HourClock` reaches
 `TaskItems.dueLabel`, and the locale's date order reaches
 `DateParser.parseTrailingDate`, as plain booleans on the state object for the
 same reason: the behaviour stays unit tested, and neither JS file gains a Qt
