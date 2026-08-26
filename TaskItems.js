@@ -1,5 +1,6 @@
 .pragma library
 .import "DateParser.js" as DateParser
+.import "ListToken.js" as ListToken
 
 // Pure helpers behind the dcalTasks launcher plugin. No QML imports, no
 // singletons, no Qt globals — everything here is unit tested by
@@ -90,12 +91,11 @@ function _timeLabel(d, use24Hour) {
     return hour12 + ":" + mm + (hour < 12 ? " AM" : " PM")
 }
 
-// A calendar hidden in dcal, or excluded from sync (which purges its local
-// copy), is one the user has switched off. Its tasks do not belong in the
-// launcher and it is not a valid creation target.
+// Which calendars can hold new tasks. The rule lives in ListToken.js — a
+// "/List" token may only name a list that is also a valid creation target —
+// and is re-exported here because this is where callers look for it.
 function isUsableTaskList(cal) {
-    return !!cal && cal.holdsTasks === true && !cal.readOnly
-        && !cal.hidden && !cal.syncDisabled
+    return ListToken.isUsableTaskList(cal)
 }
 
 // view is the resolved default view from resolveView(), or undefined for the
@@ -165,7 +165,9 @@ function _isDueByEndOfToday(due, allDay, nowMs) {
     return d.getTime() < endOfToday.getTime()
 }
 
-function selectTasks(tasks, calendars, query, showCompleted, view, use24Hour) {
+// listIds, when given, is the set of task lists a "/List" token named. It
+// narrows a *typed* query, unlike view, which only narrows the untyped list.
+function selectTasks(tasks, calendars, query, showCompleted, view, use24Hour, listIds) {
     var open = []
     var done = []
     var needle = (query || "").toLowerCase()
@@ -178,6 +180,9 @@ function selectTasks(tasks, calendars, query, showCompleted, view, use24Hour) {
             continue
 
         if (!_matchesView(task, view))
+            continue
+
+        if (listIds && listIds.indexOf(task.calendarId) === -1)
             continue
 
         var cal = cals[task.calendarId]
@@ -240,13 +245,15 @@ function _timeOf(value) {
     return isNaN(t) ? Infinity : t
 }
 
-// JSON rather than a delimited string: the payload now carries a due date
-// alongside a summary that may itself contain any character.
-function createAction(summary, due, allDay) {
+// JSON rather than a delimited string: the payload carries a due date and a
+// target list alongside a summary that may itself contain any character.
+// An empty calendarId means "the default task list", resolved by the launcher.
+function createAction(summary, due, allDay, calendarId) {
     return "create:" + JSON.stringify({
         summary: summary || "",
         due: due || "",
-        allDay: allDay === true
+        allDay: allDay === true,
+        calendarId: calendarId || ""
     })
 }
 
@@ -278,7 +285,8 @@ function parseAction(action) {
             type: "create",
             summary: fields.summary,
             due: fields.due || "",
-            allDay: fields.allDay === true
+            allDay: fields.allDay === true,
+            calendarId: fields.calendarId || ""
         }
     }
 
@@ -323,14 +331,22 @@ function buildItems(state, query) {
     // The default view narrows the list you get for free; typing means you are
     // looking for something, so a query searches everything.
     var view = q.length > 0 ? null : resolveView(state)
+
+    // A "/List" token is the one filter a typed query keeps: the user asked
+    // for it in the query itself. It also takes its own words out of the
+    // search, or "milk /personal" would look for a task called that.
+    var token = q.length > 0 ? ListToken.parseListToken(q, state.calendars) : null
+    var needle = token ? token.rest : q
+    var listIds = token ? _listIds(token.lists) : null
+
     if (q.length > 0) {
-        var createRows = _createItems(state, q)
+        var createRows = _createItems(state, q, token)
         for (var c = 0; c < createRows.length; c++)
             items.push(createRows[c])
     }
 
-    var picked = selectTasks(state.tasks, state.calendars, q, state.showCompleted, view,
-                             state.use24Hour)
+    var picked = selectTasks(state.tasks, state.calendars, needle, state.showCompleted, view,
+                             state.use24Hour, listIds)
 
     for (var i = 0; i < picked.open.length; i++)
         items.push(_taskItem(picked.open[i], false, SCORE_OPEN - i))
@@ -339,14 +355,30 @@ function buildItems(state, query) {
         items.push(_taskItem(picked.done[j], true, SCORE_DONE - j))
 
     if (items.length === 0)
-        items.push(_emptyItem(state, view))
+        items.push(_emptyItem(state, view, token))
 
     return items
 }
 
+function _listIds(lists) {
+    var ids = []
+    for (var i = 0; i < lists.length; i++)
+        ids.push(lists[i].id)
+    return ids
+}
+
 // A list emptied by the default view has to say so, or it reads as "you have
 // no tasks" when the tasks are merely filtered out.
-function _emptyItem(state, view) {
+function _emptyItem(state, view, token) {
+    // A "/List" token with nothing else typed leaves no create row to explain
+    // the emptiness, so this item carries both the reason and the way out.
+    if (token) {
+        return _noopItem(token.lists.length === 1
+                         ? "Nothing in " + token.lists[0].name
+                         : "No matching tasks",
+                         "Type a task name to create one")
+    }
+
     var mode = view ? view.mode : VIEW_ALL
     if (mode === VIEW_TODAY)
         return _noopItem("Nothing due today", "Type to search all tasks")
@@ -361,38 +393,67 @@ function _emptyItem(state, view) {
     return _noopItem("No tasks", "Type to create one")
 }
 
-// One create row, or two when the query ends in something that reads as a
-// date: the dated one first, the literal text right under it. The second row
-// is the only escape hatch for a task genuinely titled "... tomorrow", and it
-// keeps a wrong guess one arrow key away from being harmless.
-function _createItems(state, query) {
+// The create rows under a typed query. One row per task list the query names
+// with a "/List" token (or the default list when it names none), plus the
+// literal text one row down whenever this read anything out of the query.
+// That literal row is the only escape hatch for a task genuinely titled
+// "... tomorrow" or "... /etc/hosts", and it keeps a wrong guess one arrow
+// key away from being harmless.
+function _createItems(state, query, token) {
     var cals = state.calendars || {}
     var cal = cals[state.defaultCalendarId]
 
     // While calendars are still loading an unknown id means "not fetched yet",
     // not "misconfigured", so stay optimistic and keep the item actionable.
-    if (!cal && state.calendarsLoaded) {
+    var hasDefault = !!cal || !state.calendarsLoaded
+
+    // An explicit target is all a create needs; only a query with no target at
+    // all is stuck.
+    if (!token && !hasDefault) {
         return [_createRow("Set a default task list in plugin settings",
                            "Plugin settings → Dcal Tasks → Default task list",
                            "noop", SCORE_CREATE)]
     }
 
-    var where = cal ? "in " + cal.name : "in the default task list"
-    var dated = DateParser.parseTrailingDate(query, state.nowMs, state.dayFirst)
+    // A token with nothing typed around it is a filter over the list below,
+    // not a task called "/personal".
+    var text = token ? token.rest : query
+    if (token && text.length === 0)
+        return []
+
+    var dated = DateParser.parseTrailingDate(text, state.nowMs, state.dayFirst)
+    var title = dated ? dated.summary : text
+    var rows = []
+    var score = SCORE_CREATE
 
     // A query that is nothing but a date leaves no title behind, so there is
-    // no dated row to offer — only the literal text.
-    if (!dated || dated.summary.length === 0)
-        return [_createRow("Create task: " + query, where, createAction(query), SCORE_CREATE)]
+    // no targeted row to offer — only the literal text.
+    if (title.length > 0) {
+        var targets = token ? token.lists : [cal]
+        for (var i = 0; i < targets.length; i++) {
+            var target = targets[i]
+            var where = target ? "in " + target.name : "in the default task list"
+            rows.push(_createRow(
+                "Create task: " + title,
+                dated ? where + " · due " + dueLabel(dated.due, dated.allDay, state.use24Hour)
+                      : where,
+                createAction(title, dated ? dated.due : "", dated ? dated.allDay : false,
+                             token ? target.id : ""),
+                score--))
+        }
+    }
 
-    return [
-        _createRow("Create task: " + dated.summary,
-                   where + " · due " + dueLabel(dated.due, dated.allDay, state.use24Hour),
-                   createAction(dated.summary, dated.due, dated.allDay),
-                   SCORE_CREATE),
-        _createRow("Create task: " + query, where + " · no due date",
-                   createAction(query), SCORE_CREATE - 1)
-    ]
+    // The literal row only earns its place when something was read out of the
+    // query, and it can only create in the default list.
+    if (hasDefault && (dated || text !== query || rows.length === 0)) {
+        var literalWhere = cal ? "in " + cal.name : "in the default task list"
+        rows.push(_createRow("Create task: " + query,
+                             dated && rows.length > 0 ? literalWhere + " · no due date"
+                                                      : literalWhere,
+                             createAction(query), score--))
+    }
+
+    return rows
 }
 
 function _createRow(name, comment, action, score) {

@@ -1072,4 +1072,239 @@ TestCase {
             readyState({nowMs: friMorning, dayFirst: true}), "renew passport 2/9")
         compare(items[0].comment, "in Chores · due Sep 2")
     }
+
+    // ---- /List token: picking the task list from the query -----------------
+
+    readonly property var tokenCals: ({
+        "cal-chores": {id: "cal-chores", name: "Chores", accountName: "Radicale",
+                       holdsTasks: true, readOnly: false},
+        "cal-fitness": {id: "cal-fitness", name: "Fitness", accountName: "Radicale",
+                        holdsTasks: true, readOnly: false},
+        "cal-inbox": {id: "cal-inbox", name: "Inbox", accountName: "Radicale",
+                      holdsTasks: true, readOnly: false},
+        "cal-inbox0": {id: "cal-inbox0", name: "0. Inbox", accountName: "iCloud",
+                       holdsTasks: true, readOnly: false},
+        "cal-archived": {id: "cal-archived", name: "Archived", accountName: "Radicale",
+                         holdsTasks: true, readOnly: false, syncDisabled: true}
+    })
+
+    function tokenState(over) {
+        return readyState(Object.assign({calendars: tokenCals,
+                                         defaultCalendarId: "cal-chores",
+                                         nowMs: friMorning}, over))
+    }
+
+    function test_createAction_carriesTheTargetList() {
+        var p = TaskItems.parseAction(
+            TaskItems.createAction("gym", "", false, "cal-fitness"))
+        compare(p.type, "create")
+        compare(p.calendarId, "cal-fitness")
+    }
+
+    // No target means "wherever the default list is" — resolved by the
+    // launcher, not baked into the action.
+    function test_createAction_withoutATargetListIsEmpty() {
+        compare(TaskItems.parseAction(TaskItems.createAction("gym")).calendarId, "")
+    }
+
+    function test_createAction_carriesTargetListAlongsideADue() {
+        var p = TaskItems.parseAction(
+            TaskItems.createAction("gym", "2026-08-30T00:00:00Z", true, "cal-fitness"))
+        compare(p.due, "2026-08-30T00:00:00Z")
+        compare(p.allDay, true)
+        compare(p.calendarId, "cal-fitness")
+    }
+
+    function test_buildItems_listTokenPicksTheCreateTarget() {
+        var items = TaskItems.buildItems(tokenState({}), "buy milk /fitness")
+        compare(items[0].name, "Create task: buy milk")
+        compare(items[0].comment, "in Fitness")
+        compare(items[0]._preScored, 100000)
+
+        var p = TaskItems.parseAction(items[0].action)
+        compare(p.summary, "buy milk")
+        compare(p.calendarId, "cal-fitness")
+        compare(p.due, "")
+    }
+
+    // The same escape hatch a wrong date guess gets: the literal text, in the
+    // default list, one row down.
+    function test_buildItems_listTokenKeepsTheLiteralRow() {
+        var items = TaskItems.buildItems(tokenState({}), "buy milk /fitness")
+        compare(items.length, 2)
+        compare(items[1].name, "Create task: buy milk /fitness")
+        compare(items[1].comment, "in Chores")
+        compare(items[1]._preScored, 99999)
+
+        var p = TaskItems.parseAction(items[1].action)
+        compare(p.summary, "buy milk /fitness")
+        compare(p.calendarId, "")
+    }
+
+    function test_buildItems_tokenAnywhereInTheQueryPicksTheList() {
+        var items = TaskItems.buildItems(tokenState({}), "/fitness buy milk")
+        compare(items[0].name, "Create task: buy milk")
+        compare(items[0].comment, "in Fitness")
+    }
+
+    function test_buildItems_ambiguousTokenOffersARowPerList() {
+        var items = TaskItems.buildItems(tokenState({}), "buy milk /inbox")
+        compare(items.length, 3)
+        compare(items[0].comment, "in Inbox")
+        compare(items[1].comment, "in 0. Inbox")
+        compare(TaskItems.parseAction(items[0].action).calendarId, "cal-inbox")
+        compare(TaskItems.parseAction(items[1].action).calendarId, "cal-inbox0")
+        compare(items[2].name, "Create task: buy milk /inbox")
+        compare(items[2].comment, "in Chores")
+    }
+
+    function test_buildItems_ambiguousTokenRowsStayStrictlyDescending() {
+        var items = TaskItems.buildItems(tokenState({}), "buy milk /inbox tomorrow")
+        verify(items.length > 2)
+        for (var i = 1; i < items.length; i++)
+            verify(items[i]._preScored < items[i - 1]._preScored)
+    }
+
+    function test_buildItems_tokenAndDateCombine() {
+        var items = TaskItems.buildItems(tokenState({}),
+                                         "publish plugin /fitness tomorrow at 6PM")
+        compare(items[0].name, "Create task: publish plugin")
+        compare(items[0].comment, "in Fitness · due Aug 22, 6:00 PM")
+
+        var p = TaskItems.parseAction(items[0].action)
+        compare(p.summary, "publish plugin")
+        compare(p.calendarId, "cal-fitness")
+        compare(p.allDay, false)
+        var due = new Date(p.due)
+        compare(due.getDate(), 22)
+        compare(due.getHours(), 18)
+    }
+
+    // The date parser only ever reads a *trailing* phrase, so the token has
+    // to come out of the query before it runs — whichever side it was typed.
+    function test_buildItems_tokenAfterTheDateStillCombines() {
+        var items = TaskItems.buildItems(tokenState({}),
+                                         "publish plugin tomorrow at 6PM /fitness")
+        compare(items[0].name, "Create task: publish plugin")
+        compare(items[0].comment, "in Fitness · due Aug 22, 6:00 PM")
+    }
+
+    function test_buildItems_tokenAndDateKeepTheUndatedLiteralRow() {
+        var items = TaskItems.buildItems(tokenState({}),
+                                         "publish plugin /fitness tomorrow at 6PM")
+        compare(items.length, 2)
+        compare(items[1].name, "Create task: publish plugin /fitness tomorrow at 6PM")
+        compare(items[1].comment, "in Chores · no due date")
+        var p = TaskItems.parseAction(items[1].action)
+        compare(p.due, "")
+        compare(p.calendarId, "")
+    }
+
+    // Nothing is left to title the task, so only the literal reading stands —
+    // the same answer a bare "tomorrow" gets.
+    function test_buildItems_tokenWithOnlyADateOffersTheLiteralRow() {
+        var items = TaskItems.buildItems(tokenState({}), "/fitness tomorrow")
+        compare(items.length, 1)
+        compare(items[0].name, "Create task: /fitness tomorrow")
+        compare(items[0].comment, "in Chores")
+    }
+
+    function test_buildItems_tokenFiltersTheTaskList() {
+        var items = TaskItems.buildItems(tokenState({
+            tasks: [
+                makeTask({id: "a", summary: "Squats", calendarId: "cal-fitness"}),
+                makeTask({id: "b", summary: "Dishes", calendarId: "cal-chores"})
+            ]
+        }), "/fitness")
+        compare(items.length, 1)
+        compare(items[0].name, "Squats")
+    }
+
+    // A token-only query is a filter, not a title: there is nothing to create.
+    function test_buildItems_tokenOnlyQueryOffersNoCreateRow() {
+        var items = TaskItems.buildItems(tokenState({
+            tasks: [makeTask({id: "a", summary: "Squats", calendarId: "cal-fitness"})]
+        }), "/fitness")
+        compare(items.length, 1)
+        compare(items[0].action, "toggle:a:true")
+    }
+
+    function test_buildItems_tokenSearchesOnlyTheRemainingWords() {
+        var items = TaskItems.buildItems(tokenState({
+            tasks: [
+                makeTask({id: "a", summary: "Buy milk", calendarId: "cal-fitness"}),
+                makeTask({id: "b", summary: "Buy milk", calendarId: "cal-chores"}),
+                makeTask({id: "c", summary: "Squats", calendarId: "cal-fitness"})
+            ]
+        }), "milk /fitness")
+        compare(items.length, 3)
+        compare(items[2].name, "Buy milk")
+        compare(TaskItems.parseAction(items[2].action).id, "a")
+    }
+
+    function test_buildItems_emptyFilteredListNamesTheList() {
+        var items = TaskItems.buildItems(tokenState({
+            tasks: [makeTask({id: "b", summary: "Dishes", calendarId: "cal-chores"})]
+        }), "/fitness")
+        compare(items.length, 1)
+        compare(items[0].name, "Nothing in Fitness")
+        compare(items[0].comment, "Type a task name to create one")
+        compare(items[0].action, "noop")
+    }
+
+    // A token naming nothing is ordinary text — a path, a URL, a fraction.
+    function test_buildItems_unmatchedTokenIsOrdinaryText() {
+        var items = TaskItems.buildItems(tokenState({}), "fix /etc/hosts")
+        compare(items.length, 1)
+        compare(items[0].name, "Create task: fix /etc/hosts")
+        compare(items[0].comment, "in Chores")
+        compare(TaskItems.parseAction(items[0].action).calendarId, "")
+    }
+
+    // A list switched off in dcal is not a creation target, so its name must
+    // not answer to a token either.
+    function test_buildItems_unusableListIsNotReachableByToken() {
+        var items = TaskItems.buildItems(tokenState({}), "buy milk /archived")
+        compare(items.length, 1)
+        compare(items[0].name, "Create task: buy milk /archived")
+        compare(items[0].comment, "in Chores")
+    }
+
+    // An explicit target is all a create needs, so the "configure a default
+    // list" prompt has nothing to prompt about.
+    function test_buildItems_tokenCreatesWithoutADefaultList() {
+        var items = TaskItems.buildItems(
+            tokenState({defaultCalendarId: ""}), "buy milk /fitness")
+        compare(items.length, 1)
+        compare(items[0].name, "Create task: buy milk")
+        compare(items[0].comment, "in Fitness")
+        compare(TaskItems.parseAction(items[0].action).calendarId, "cal-fitness")
+    }
+
+    function test_buildItems_withoutATokenTheDefaultListPromptStands() {
+        var items = TaskItems.buildItems(
+            tokenState({defaultCalendarId: ""}), "buy milk")
+        compare(items[0].name, "Set a default task list in plugin settings")
+    }
+
+    function test_selectTasks_restrictsToTheGivenLists() {
+        var tasks = [
+            makeTask({id: "a", summary: "Squats", calendarId: "cal-fitness"}),
+            makeTask({id: "b", summary: "Dishes", calendarId: "cal-chores"})
+        ]
+        var r = TaskItems.selectTasks(tasks, tokenCals, "", false, null, false,
+                                      ["cal-fitness"])
+        compare(r.open.length, 1)
+        compare(r.open[0].task.id, "a")
+    }
+
+    function test_selectTasks_omittedListIdsKeepEverything() {
+        var tasks = [
+            makeTask({id: "a", summary: "Squats", calendarId: "cal-fitness"}),
+            makeTask({id: "b", summary: "Dishes", calendarId: "cal-chores"})
+        ]
+        compare(TaskItems.selectTasks(tasks, tokenCals, "", false, null, false).open.length, 2)
+        compare(TaskItems.selectTasks(tasks, tokenCals, "", false, null, false, null)
+                .open.length, 2)
+    }
 }
