@@ -83,6 +83,8 @@ Item {
 
     // The DMS launcher calls this synchronously on every keystroke, so it must
     // never block. Return whatever is cached and let the refresh land later.
+    // DMS 2.0 creates this component on the first query rather than at shell
+    // startup, so the very first call always starts from an empty cache.
     function getItems(query) {
         refreshIfStale()
         return TaskItems.buildItems({
@@ -152,9 +154,9 @@ Item {
             calendarsProcess.running = true
     }
 
-    // Controller.qml:135 re-runs the launcher search on this signal, and
-    // early-returns when the launcher is closed, so this is free when nobody
-    // is looking.
+    // The launcher's Controller (onRequestLauncherUpdate) re-runs the search
+    // on this signal, and early-returns when the launcher is closed, so this
+    // is free when nobody is looking.
     function notifyLauncher() {
         if (pluginService && pluginService.requestLauncherUpdate)
             pluginService.requestLauncherUpdate(pluginName)

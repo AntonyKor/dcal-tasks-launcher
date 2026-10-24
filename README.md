@@ -1,7 +1,7 @@
 # Dcal Tasks
 
-A [Dank Material Shell](https://danklinux.com/docs/dankmaterialshell) launcher
-plugin for [dcal](https://github.com/AvengeMedia/dankcalendar) tasks. It lists,
+A [Dux Shell](https://duxlabs.dev/docs) (DMS) launcher plugin for
+[Dux Calendar](https://github.com/duxlabs-dev/dux-calendar) (`dcal`) tasks. It lists,
 searches, creates, and completes tasks from any dcal calendar directly in the
 DMS launcher.
 
@@ -9,8 +9,9 @@ DMS launcher.
 
 ## Requirements
 
-- DankMaterialShell >= 1.5.0
-- [dcal](https://github.com/AvengeMedia/dankcalendar) installed, with its
+- Dux Shell >= 2.0.0. For DMS 1.x, use release 0.2.0
+  of this plugin.
+- [Dux Calendar](https://github.com/duxlabs-dev/dux-calendar) (`dcal`) installed, with its
   daemon running (`dcal run -d`)
 
 No other runtime dependencies. Unlike some other dcal-related DMS plugins,
@@ -22,7 +23,7 @@ QML/JS.
 Manual install:
 
 ```bash
-git clone <your-fork-url> ~/.config/DankMaterialShell/plugins/dcalTasks
+git clone <your-fork-url> ~/.config/dms/plugins/dcalTasks
 ```
 
 Then reload plugins from DMS settings, or restart the shell.
@@ -36,6 +37,7 @@ inputs.dms-plugin-dcal-tasks = {
   flake = false;
 };
 
+# Upstream still names the Dux Shell module "dank-material-shell".
 programs.dank-material-shell.plugins.dcalTasks = {
   enable = true;
   src = inputs.dms-plugin-dcal-tasks;
@@ -232,7 +234,7 @@ follow.
 
 | Key | Default | Effect |
 |---|---|---|
-| `trigger` | `;` | Prefix that opens this launcher in DMS. Reload the plugin after changing it. |
+| `trigger` | `;` | Prefix that opens this launcher in DMS. Takes effect on the next keystroke. |
 | `defaultCalendarId` | `""` | dcal calendar ID that new tasks are created in. Empty disables task creation, except for a query that names a list itself with `/<list>`. |
 | `defaultView` | `all` | Which tasks the launcher lists before you type. `all` shows everything, `today` shows tasks due today or already overdue, `defaultList` shows only the default task list. Typing a query always searches everything. |
 | `showCompleted` | `false` | When true, completed tasks are listed below the open ones, most recently completed first. |
