@@ -2,7 +2,7 @@
   "id": "dcalTasks",
   "name": "Dcal Tasks",
   "description": "List, search, create, and complete dcal tasks from the launcher.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "AntonyKor",
   "icon": "task_alt",
   "type": "launcher",
