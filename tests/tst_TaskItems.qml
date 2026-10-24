@@ -769,7 +769,7 @@ TestCase {
         compare(o[1].value, "c2")
     }
 
-    // DankDropdown elides right at a fixed width, so a shared account prefix
+    // DDropdown elides right at a fixed width, so a shared account prefix
     // would truncate every entry to the same stub. The list name leads.
     function test_taskListOptions_labelIsBareNameWhenUnambiguous() {
         var o = TaskItems.taskListOptions(writableCals)

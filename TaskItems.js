@@ -494,7 +494,7 @@ function _taskItem(entry, isDone, score) {
 }
 
 // Builds the settings dropdown's option list. Only writable task lists are
-// offerable. The label leads with the list name because DankDropdown elides
+// offerable. The label leads with the list name because DDropdown elides
 // right at a fixed width: leading with the account name makes every entry of a
 // multi-list account render as an identical truncated stub. The account is
 // appended only to disambiguate lists that share a name.

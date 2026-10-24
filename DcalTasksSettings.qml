@@ -1,7 +1,7 @@
 import QtQuick
 import Quickshell.Io
 import qs.Common
-import qs.Widgets
+import qs.DCommon.Widgets
 import qs.Modules.Plugins
 import "TaskItems.js" as TaskItems
 
@@ -10,7 +10,7 @@ PluginSettings {
 
     pluginId: "dcalTasks"
 
-    // Option 0 must never change its label. DankDropdown feeds its ListView
+    // Option 0 must never change its label. DDropdown feeds its ListView
     // through a ScriptModel, which reuses delegates by value; swapping index 0
     // out from under a built delegate leaves the old text rendered behind the
     // new one. So the prompt is the permanent first entry in every state, real
@@ -58,14 +58,6 @@ PluginSettings {
                 root.calendarOptions = [root.promptOption].concat(options)
             }
         }
-    }
-
-    StyledText {
-        width: parent.width
-        text: "Reload the plugin after changing the trigger."
-        font.pixelSize: Theme.fontSizeSmall
-        color: Theme.surfaceVariantText
-        wrapMode: Text.WordWrap
     }
 
     StringSetting {
